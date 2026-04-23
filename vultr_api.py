@@ -107,6 +107,32 @@ class VultrAPI:
             time.sleep(10)
         raise TimeoutError("伺服器在時限內未完成啟動，請到 Vultr 後台確認。")
 
+    def list_irl_instances(self) -> list[dict]:
+        """列出帳號下所有 label 為 irl-server 的 instances。"""
+        instances = []
+        cursor = None
+        while True:
+            params = {"per_page": 100}
+            if cursor:
+                params["cursor"] = cursor
+            resp = self._get("/instances", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            for inst in data.get("instances", []):
+                if inst.get("label") == "irl-server":
+                    instances.append({
+                        "id":     inst["id"],
+                        "ip":     inst.get("main_ip", "unknown"),
+                        "region": inst.get("region", "unknown"),
+                        "status": inst.get("status", "unknown"),
+                    })
+            # 分頁處理
+            meta = data.get("meta", {})
+            cursor = meta.get("links", {}).get("next", "")
+            if not cursor:
+                break
+        return instances
+
     def delete_instance(self, instance_id: str):
         try:
             self._delete(f"/instances/{instance_id}")

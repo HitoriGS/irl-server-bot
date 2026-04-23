@@ -85,7 +85,7 @@ async def handle_disclaimer(message: discord.Message, state: dict):
     text = message.content.strip()
     if text == "取消":
         user_states.pop(message.author.id, None)
-        await message.channel.send("❌ 已取消。如需重新開始，請在伺服器使用 `/setup`。")
+        await message.channel.send("❌ 已取消。如需重新開始，請在伺服器使用 `/irlsetup`。")
         return
     if text != "同意":
         await message.channel.send("請輸入 `同意` 表示同意聲明並繼續，或輸入 `取消` 中止。")
@@ -218,7 +218,7 @@ async def handle_confirmation(message: discord.Message, state: dict):
     text = message.content.strip()
     if text == "取消":
         user_states.pop(message.author.id, None)
-        await message.channel.send("❌ 已取消。如需重新開始，請在伺服器使用 `/setup`。")
+        await message.channel.send("❌ 已取消。如需重新開始，請在伺服器使用 `/irlsetup`。")
         return
     if text != "確認":
         await message.channel.send("請輸入 `確認` 或 `取消`。")
@@ -291,6 +291,7 @@ def _deploy_blocking(data: dict, progress) -> dict:
             "twitch_oauth": data["twitch_oauth"],
             "obs_password": data["obs_password"],
             "obs_port":     data["obs_port"],
+            "vultr_key":    data["vultr_key"],
         }
 
     except Exception:
@@ -315,6 +316,16 @@ async def send_completion(user: discord.User, result: dict):
     e.add_field(name="🎬 拉流位址（OBS 媒體來源）",     value=f"```{srt_pull}```", inline=False)
     e.add_field(name="🖥️ 伺服器 IP",                   value=f"`{ip}`",           inline=True)
     e.add_field(name="💰 月費",                         value="約 $6 USD",         inline=True)
+    e.add_field(
+        name="🔑 Vultr API Key（點擊顯示）",
+        value=f"||`{result['vultr_key']}`||",
+        inline=False,
+    )
+    e.add_field(
+        name="💡 提示",
+        value="未來如需刪除伺服器，請使用 `/delete` 指令，並回到此訊息點開 API Key 貼上。",
+        inline=False,
+    )
     await user.send(embed=e)
 
     # 2. 三個設定檔
@@ -387,6 +398,138 @@ async def send_completion(user: discord.User, result: dict):
     await user.send("🎊 **全部完成！祝你直播順利！** 如有任何問題歡迎回到伺服器詢問。")
 
 
+# ── 刪除伺服器流程 ─────────────────────────────────────────────────────────────
+
+async def send_delete_welcome(user: discord.User):
+    user_states[user.id] = {"step": "delete_awaiting_key", "data": {}}
+    e = embed("🗑️ 刪除 IRL 伺服器", color=0xd32f2f)
+    e.add_field(name="⚠️ 警告", inline=False, value=(
+        "此操作將**永久刪除**你的 Vultr 伺服器，**無法復原**。\n\n"
+        "請回到當時機器人傳給你的完成訊息，點開 **Vultr API Key（防劇透）** 後貼過來。"
+    ))
+    await user.send(embed=e)
+
+
+async def handle_delete_key(message: discord.Message, state: dict):
+    api_key = message.content.strip()
+    await message.channel.send("⏳ 正在驗證 API Key 並查詢伺服器...")
+    loop = asyncio.get_event_loop()
+    vultr = VultrAPI(api_key)
+    valid = await loop.run_in_executor(executor, vultr.validate_key)
+    if not valid:
+        await message.channel.send("❌ API Key 無效，請確認後重新貼上。")
+        return
+
+    instances = await loop.run_in_executor(executor, vultr.list_irl_instances)
+    if not instances:
+        user_states.pop(message.author.id, None)
+        await message.channel.send(
+            "✅ 此 API Key 帳號下找不到任何 IRL 伺服器，可能已經刪除或從未建立。"
+        )
+        return
+
+    state["data"]["vultr_key"] = api_key
+    state["data"]["instances"]  = instances
+    state["step"] = "delete_select"
+
+    e = embed("✅ 找到以下 IRL 伺服器", color=0xff9800)
+    lines = []
+    for i, inst in enumerate(instances, 1):
+        lines.append(f"`{i}` — IP: `{inst['ip']}` ｜ 地區: `{inst['region']}` ｜ 狀態: `{inst['status']}`")
+    e.add_field(name="請輸入編號選擇要刪除的伺服器", value="\n".join(lines), inline=False)
+    e.add_field(name="", value="輸入 `取消` 中止。", inline=False)
+    await message.channel.send(embed=e)
+
+
+async def handle_delete_select(message: discord.Message, state: dict):
+    text = message.content.strip()
+    if text == "取消":
+        user_states.pop(message.author.id, None)
+        await message.channel.send("❌ 已取消刪除。")
+        return
+
+    instances = state["data"]["instances"]
+    if not text.isdigit() or not (1 <= int(text) <= len(instances)):
+        await message.channel.send(f"❌ 請輸入 1–{len(instances)} 之間的數字，或輸入 `取消`。")
+        return
+
+    selected = instances[int(text) - 1]
+    state["data"]["selected"] = selected
+    state["step"] = "delete_confirm_1"
+
+    e = embed("⚠️ 第一道確認", color=0xd32f2f)
+    e.add_field(name="你選擇刪除的伺服器", inline=False,
+        value=f"IP: `{selected['ip']}` ｜ 地區: `{selected['region']}`")
+    e.add_field(name="請輸入以下文字繼續", value="`確認刪除`", inline=False)
+    await message.channel.send(embed=e)
+
+
+async def handle_delete_confirm_1(message: discord.Message, state: dict):
+    if message.content.strip() == "取消":
+        user_states.pop(message.author.id, None)
+        await message.channel.send("❌ 已取消刪除。")
+        return
+    if message.content.strip() != "確認刪除":
+        await message.channel.send("❌ 請輸入 `確認刪除` 繼續，或輸入 `取消` 中止。")
+        return
+
+    state["step"] = "delete_confirm_2"
+    ip = state["data"]["selected"]["ip"]
+    e = embed("⚠️ 第二道確認", color=0xd32f2f)
+    e.add_field(name="請輸入伺服器 IP 確認", inline=False,
+        value=f"請輸入 `{ip}` 以確認你刪除的是正確的伺服器。")
+    await message.channel.send(embed=e)
+
+
+async def handle_delete_confirm_2(message: discord.Message, state: dict):
+    if message.content.strip() == "取消":
+        user_states.pop(message.author.id, None)
+        await message.channel.send("❌ 已取消刪除。")
+        return
+    ip = state["data"]["selected"]["ip"]
+    if message.content.strip() != ip:
+        await message.channel.send(f"❌ IP 不符，請重新輸入 `{ip}`，或輸入 `取消` 中止。")
+        return
+
+    state["step"] = "delete_confirm_3"
+    e = embed("⚠️ 第三道確認（最終）", color=0xd32f2f)
+    e.add_field(name="最後一步", inline=False, value=(
+        "此操作**無法復原**。伺服器刪除後，所有資料將永久消失。\n\n"
+        "請輸入以下文字確認：\n`我了解此操作無法復原`"
+    ))
+    await message.channel.send(embed=e)
+
+
+async def handle_delete_confirm_3(message: discord.Message, state: dict):
+    if message.content.strip() == "取消":
+        user_states.pop(message.author.id, None)
+        await message.channel.send("❌ 已取消刪除。")
+        return
+    if message.content.strip() != "我了解此操作無法復原":
+        await message.channel.send("❌ 請輸入 `我了解此操作無法復原`，或輸入 `取消` 中止。")
+        return
+
+    state["step"] = "deleting"
+    selected = state["data"]["selected"]
+    await message.channel.send(f"🗑️ **正在刪除伺服器 `{selected['ip']}`...**")
+
+    loop = asyncio.get_event_loop()
+    vultr = VultrAPI(state["data"]["vultr_key"])
+    try:
+        await loop.run_in_executor(executor, lambda: vultr.delete_instance(selected["id"]))
+        await message.channel.send(
+            f"✅ **伺服器 `{selected['ip']}` 已成功刪除。**\n"
+            "Vultr 帳單將於本月結算時按比例計算，不會繼續收費。"
+        )
+    except Exception as exc:
+        logger.exception("Delete instance failed")
+        await message.channel.send(
+            f"❌ 刪除失敗：```{exc}```\n請到 Vultr 後台手動確認並刪除。"
+        )
+    finally:
+        user_states.pop(message.author.id, None)
+
+
 # ── Discord 事件 ───────────────────────────────────────────────────────────────
 
 @bot.event
@@ -399,7 +542,26 @@ async def on_ready():
         logger.error(f"Sync failed: {e}")
 
 
-@bot.tree.command(name="setup", description="開始架設你的 IRL 直播伺服器 🎮")
+@bot.tree.command(name="irldelete", description="刪除你的 IRL 直播伺服器 🗑️")
+async def delete_command(interaction: discord.Interaction):
+    user = interaction.user
+    current_step = user_states.get(user.id, {}).get("step", "")
+    if current_step in ("deploying", "deleting"):
+        await interaction.response.send_message(
+            "⚠️ 目前有操作正在進行中，請等待完成後再試。", ephemeral=True
+        )
+        return
+    await interaction.response.defer(ephemeral=True)
+    try:
+        await send_delete_welcome(user)
+        await interaction.followup.send("✅ 已收到！請查看我傳給你的 **私訊** 繼續操作。", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send(
+            "❌ 無法傳送私訊！\n請開啟 **允許來自伺服器成員的私訊** 後再試一次。", ephemeral=True
+        )
+
+
+@bot.tree.command(name="irlsetup", description="開始架設你的 IRL 直播伺服器 🎮")
 async def setup_command(interaction: discord.Interaction):
     user = interaction.user
     if user_states.get(user.id, {}).get("step") == "deploying":
@@ -426,11 +588,14 @@ async def on_message(message: discord.Message):
 
     uid = message.author.id
     if uid not in user_states:
-        await message.channel.send("請先在伺服器中使用 `/setup` 指令開始設定！")
+        await message.channel.send(
+            "請先在伺服器中使用 `/irlsetup` 架設伺服器，或使用 `/irldelete` 刪除伺服器。"
+        )
         return
 
     state = user_states[uid]
     handlers = {
+        # 架設流程
         "awaiting_disclaimer":   handle_disclaimer,
         "awaiting_vultr_key":    handle_vultr_key,
         "awaiting_region":       handle_region,
@@ -440,6 +605,13 @@ async def on_message(message: discord.Message):
         "awaiting_obs_port":     handle_obs_port,
         "confirming":            handle_confirmation,
         "deploying":             lambda m, s: m.channel.send("⏳ 部署正在進行中，請耐心等候..."),
+        # 刪除流程
+        "delete_awaiting_key":   handle_delete_key,
+        "delete_select":         handle_delete_select,
+        "delete_confirm_1":      handle_delete_confirm_1,
+        "delete_confirm_2":      handle_delete_confirm_2,
+        "delete_confirm_3":      handle_delete_confirm_3,
+        "deleting":              lambda m, s: m.channel.send("⏳ 刪除正在進行中，請耐心等候..."),
     }
     handler = handlers.get(state["step"])
     if handler:

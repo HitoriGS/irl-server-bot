@@ -309,10 +309,27 @@ async def send_completion(user: discord.User, result: dict):
     srt_push = f"srtla://{ip}:5000?streamid=live/stream/belabox"
     srt_pull = f"srt://{ip}:8282?streamid=play/stream/belabox"
 
+    moblin_url = (
+        f"moblin://?{{%22streams%22:[{{%22name%22:%22Vultr-SRT%22,"
+        f"%22url%22:%22srtla://{ip}:5000?streamid=live/stream/belabox%22,"
+        f"%22video%22:{{%22codec%22:%22H.265/HEVC%22}}}}]}}"
+    )
+    larix_url = (
+        f"larix://set/v1?"
+        f"conn[][url]=srtla%3A%2F%2F{ip}%3A5000"
+        f"&conn[][name]=Vultr-SRT"
+        f"&conn[][srtlatency]=2500"
+        f"&conn[][srtstreamid]=live%2Fstream%2Fbelabox"
+    )
+
     # 1. 摘要 embed
     e = embed("🎉 IRL 伺服器架設完成！", color=0x43a047)
     e.add_field(name="📡 推流位址（手機 App 使用）",    value=f"```{srt_push}```", inline=False)
-    e.add_field(name="🎬 拉流位址（OBS 媒體來源）",     value=f"```{srt_pull}```", inline=False)
+    e.add_field(name="📱 手機 App 一鍵設定", inline=False, value=(
+        f"[Moblin 點此設定]({moblin_url})\n\n"
+        f"[IRL Pro 點此設定]({larix_url})"
+    ))
+    e.add_field(name="🎬 拉流位址（OBS 媒體來源，已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
     e.add_field(name="🖥️ 伺服器 IP",                   value=f"`{ip}`",           inline=True)
     e.add_field(name="💰 月費",                         value="約 $6 USD",         inline=True)
     e.add_field(

@@ -186,6 +186,21 @@ async def handle_twitch_oauth(message: discord.Message, state: dict):
 
 async def handle_obs_password(message: discord.Message, state: dict):
     state["data"]["obs_password"] = message.content.strip()
+    state["step"] = "awaiting_obs_port"
+    e = embed(color=0x43a047)
+    e.add_field(name="STEP 6 ── OBS WebSocket Port", inline=False, value=(
+        "請到 OBS → **工具** → **WebSocket 伺服器設定** → 查看伺服器連接埠\n\n"
+        "預設為 `4455`，如果你沒有更改過，直接輸入 `4455` 即可。"
+    ))
+    await message.channel.send(embed=e)
+
+
+async def handle_obs_port(message: discord.Message, state: dict):
+    port_str = message.content.strip()
+    if not port_str.isdigit() or not (1 <= int(port_str) <= 65535):
+        await message.channel.send("❌ Port 格式不正確，請輸入一個數字（例如 `4455`）。")
+        return
+    state["data"]["obs_port"] = int(port_str)
     state["step"] = "confirming"
     d = state["data"]
     e = embed("📋 請確認以下資料", color=0xff9800)
@@ -193,6 +208,7 @@ async def handle_obs_password(message: discord.Message, state: dict):
     e.add_field(name="Twitch ID",    value=d["twitch_id"],                              inline=True)
     e.add_field(name="OAuth Token",  value=f'`{d["twitch_oauth"][:8]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS 密碼",     value=f'`{d["obs_password"][:3]}...`（已遮罩）',  inline=True)
+    e.add_field(name="OBS Port",     value=f'`{d["obs_port"]}`',                       inline=True)
     e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
         "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"
         "輸入 `確認` 開始 ／ `取消` 中止"
@@ -276,6 +292,7 @@ def _deploy_blocking(data: dict, progress) -> dict:
             "twitch_id":    data["twitch_id"],
             "twitch_oauth": data["twitch_oauth"],
             "obs_password": data["obs_password"],
+            "obs_port":     data["obs_port"],
         }
 
     except Exception:
@@ -289,6 +306,7 @@ async def send_completion(user: discord.User, result: dict):
     tid     = result["twitch_id"]
     oauth   = result["twitch_oauth"]
     obs_pw  = result["obs_password"]
+    obs_port = result["obs_port"]
 
     srt_push = f"srtla://{ip}:5000?streamid=live/stream/belabox"
     srt_pull = f"srt://{ip}:8282?streamid=play/stream/belabox"
@@ -302,7 +320,7 @@ async def send_completion(user: discord.User, result: dict):
     await user.send(embed=e)
 
     # 2. 三個設定檔
-    config_json = generate_config_json(tid, ip, obs_pw)
+    config_json = generate_config_json(tid, ip, obs_pw, obs_port)
     env_content = generate_env_file(tid, oauth)
     obs_json    = generate_obs_json(ip)
 
@@ -421,6 +439,7 @@ async def on_message(message: discord.Message):
         "awaiting_twitch_id":    handle_twitch_id,
         "awaiting_twitch_oauth": handle_twitch_oauth,
         "awaiting_obs_password": handle_obs_password,
+        "awaiting_obs_port":     handle_obs_port,
         "confirming":            handle_confirmation,
         "deploying":             lambda m, s: m.channel.send("⏳ 部署正在進行中，請耐心等候..."),
     }

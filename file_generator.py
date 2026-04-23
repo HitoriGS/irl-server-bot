@@ -342,11 +342,12 @@ OBS_TEMPLATE = {
 
 # ── 產生函式 ──────────────────────────────────────────────────────────────────
 
-def generate_config_json(twitch_id: str, server_ip: str, obs_password: str) -> str:
+def generate_config_json(twitch_id: str, server_ip: str, obs_password: str, obs_port: int = 4455) -> str:
     cfg = copy.deepcopy(CONFIG_TEMPLATE)
     cfg["user"]["name"] = twitch_id
     cfg["switcher"]["streamServers"][1]["streamServer"]["statsUrl"] = f"http://{server_ip}:8181/stats"
     cfg["software"]["password"] = obs_password
+    cfg["software"]["port"] = obs_port
     cfg["chat"]["username"] = twitch_id
     cfg["chat"]["admins"] = [twitch_id]
     return json.dumps(cfg, ensure_ascii=False, indent=2)

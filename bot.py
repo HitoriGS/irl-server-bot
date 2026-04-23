@@ -319,34 +319,12 @@ async def send_completion(user: discord.User, result: dict):
     moblin_url = f"https://hitorigs.live/irl/moblin/?ip={ip}"
     larix_url  = f"https://hitorigs.live/irl/larix/?ip={ip}"
 
-    # 1. 摘要 embed
-    e = embed("🎉 IRL 伺服器架設完成！", color=0x43a047)
-    e.add_field(name="📡 推流位址（手機 App 使用）",    value=f"```{srt_push}```", inline=False)
-    e.add_field(name="📱 手機 App 一鍵設定", inline=False, value=(
-        f"[Moblin 點此設定]({moblin_url})\n\n"
-        f"[IRL Pro 點此設定]({larix_url})"
-    ))
-    e.add_field(name="🎬 拉流位址（OBS 媒體來源，已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
-    e.add_field(name="🖥️ 伺服器 IP",                   value=f"`{ip}`",           inline=True)
-    e.add_field(name="💰 月費",                         value="約 $6 USD",         inline=True)
-    e.add_field(
-        name="🔑 Vultr API Key（點擊顯示）",
-        value=f"||`{result['vultr_key']}`||",
-        inline=False,
-    )
-    e.add_field(
-        name="💡 提示",
-        value="未來如需刪除伺服器，請回到 HitoriGS 的 Discord 伺服器使用 `/irldelete` 指令，並回到此訊息點開 API Key 貼上。",
-        inline=False,
-    )
-    await user.send(embed=e)
-
-    # 2. 產生設定檔
+    # 1. 產生設定檔
     config_json = generate_config_json(tid, ip, obs_pw, obs_port)
     env_content = generate_env_file(tid, oauth)
     obs_json    = generate_obs_json(ip)
 
-    # 3. NOALBS 安裝說明 + config.json / .env
+    # 2. NOALBS 安裝說明 + config.json / .env
     e2 = embed("📥 STEP 1 ── 安裝 NOALBS", color=0x1565c0)
     e2.add_field(name="下載連結", value=NOALBS_URL, inline=False)
     e2.add_field(name="安裝步驟", inline=False, value=(
@@ -370,7 +348,7 @@ async def send_completion(user: discord.User, result: dict):
         ],
     )
 
-    # 4. OBS 場景集匯入說明 + IRL.json
+    # 3. OBS 場景集匯入說明 + IRL.json
     e3 = embed("🎬 STEP 2 ── 匯入 OBS 場景集", color=0x1565c0)
     e3.add_field(name="場景集資料夾路徑", inline=False, value=(
         "**Windows：**\n`%APPDATA%\\obs-studio\\basic\\scenes\\`\n\n"
@@ -390,7 +368,7 @@ async def send_completion(user: discord.User, result: dict):
         ],
     )
 
-    # 5. 開台流程提示
+    # 4. 開台流程提示
     e4 = embed("▶️ STEP 3 ── 每次開台的流程", color=0x1565c0)
     e4.add_field(name="開台前必做", inline=False, value=(
         "1. 開啟 **OBS**（確認場景集為 IRL）\n"
@@ -400,6 +378,28 @@ async def send_completion(user: discord.User, result: dict):
         "⚠️ OBS 和 NOALBS **兩個都要開**，缺一不可！"
     ))
     await user.send(embed=e4)
+
+    # 5. 摘要 embed（移至 STEP 3 後方）
+    e = embed("🎉 設定完成！以下是你的伺服器資訊", color=0x43a047)
+    e.add_field(name="📡 推流位址（手機 App 使用）",    value=f"```{srt_push}```", inline=False)
+    e.add_field(name="📱 手機 App 一鍵設定", inline=False, value=(
+        f"[Moblin 點此設定]({moblin_url})\n\n"
+        f"[IRL Pro 點此設定]({larix_url})"
+    ))
+    e.add_field(name="🎬 拉流位址（OBS 媒體來源，已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
+    e.add_field(name="🖥️ 伺服器 IP",                   value=f"`{ip}`",           inline=True)
+    e.add_field(name="💰 月費",                         value="約 $6 USD",         inline=True)
+    e.add_field(
+        name="🔑 Vultr API Key（點擊顯示）",
+        value=f"||`{result['vultr_key']}`||",
+        inline=False,
+    )
+    e.add_field(
+        name="💡 提示",
+        value="未來如需刪除伺服器，請回到 HitoriGS 的 Discord 伺服器使用 `/irldelete` 指令，並回到此訊息點開 API Key 貼上。",
+        inline=False,
+    )
+    await user.send(embed=e)
 
     # 6. NOALBS 聊天室指令
     e5 = embed("💬 NOALBS 聊天室指令", color=0x6a1b9a)

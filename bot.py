@@ -96,6 +96,9 @@ async def handle_disclaimer(message: discord.Message, state: dict):
     e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
         f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
         f"👉 {VULTR_REFERRAL}\n\n"
+        f"註冊帳號需綁定 Paypal 或信用卡\n"
+        f"不須預先儲值，可勾選 **I just want to link my credit card.**\n"
+        f"伺服器是月結帳單付款\n\n"
         f"註冊完成後，請參考以下圖文教學取得 API Key：\n"
         f"📖 {VULTR_API_GUIDE}\n\n"
         f"取得 API Key 後貼給我。"
@@ -310,16 +313,16 @@ async def send_completion(user: discord.User, result: dict):
     srt_pull = f"srt://{ip}:8282?streamid=play/stream/belabox"
 
     moblin_url = (
-        f"moblin://?{{%22streams%22:[{{%22name%22:%22Vultr-SRT%22,"
+        f"moblin://?%7B%22streams%22:%5B%7B%22name%22:%22Vultr-SRT%22,"
         f"%22url%22:%22srtla://{ip}:5000?streamid=live/stream/belabox%22,"
-        f"%22video%22:{{%22codec%22:%22H.265/HEVC%22}}}}]}}"
+        f"%22video%22:%7B%22codec%22:%22H.265/HEVC%22%7D%7D%5D%7D"
     )
     larix_url = (
         f"larix://set/v1?"
-        f"conn[][url]=srtla%3A%2F%2F{ip}%3A5000"
-        f"&conn[][name]=Vultr-SRT"
-        f"&conn[][srtlatency]=2500"
-        f"&conn[][srtstreamid]=live%2Fstream%2Fbelabox"
+        f"conn%5B%5D%5Burl%5D=srtla%3A%2F%2F{ip}%3A5000"
+        f"&conn%5B%5D%5Bname%5D=Vultr-SRT"
+        f"&conn%5B%5D%5Bsrtlatency%5D=2500"
+        f"&conn%5B%5D%5Bsrtstreamid%5D=live%2Fstream%2Fbelabox"
     )
 
     # 1. 摘要 embed

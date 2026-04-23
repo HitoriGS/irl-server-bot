@@ -23,6 +23,7 @@ VULTR_REFERRAL   = "https://www.vultr.com/?ref=9097831"
 TWITCH_TOKEN_URL = "https://twitchtokengenerator.com/"
 SPEED_TEST_URL   = "https://cloud.feitsui.com/zh-hant/vultr"
 NOALBS_URL       = "https://github.com/NOALBS/nginx-obs-automatic-low-bitrate-switching/releases"
+VULTR_API_GUIDE  = "https://www.notion.so/hitorigs/Vultr-API-34bf0e91ede080d985b4f9e7935e632b"
 
 REGIONS = {
     "1": ("🇯🇵 日本 東京",   "nrt"),
@@ -96,17 +97,14 @@ async def handle_disclaimer(message: discord.Message, state: dict):
     e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
         f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
         f"👉 {VULTR_REFERRAL}\n\n"
-        f"**取得 API Key 步驟：**\n"
-        f"1. 登入後前往 右上角頭像 → **Account** → **API**\n"
-        f"2. 點擊 **Create API Key** 建立一組新的 Key\n"
-        f"3. 複製產生的 Key 值（**只會顯示一次，請立刻複製**）\n"
-        f"4. 貼給我"
+        f"註冊完成後，請參考以下圖文教學取得 API Key：\n"
+        f"📖 {VULTR_API_GUIDE}\n\n"
+        f"取得 API Key 後貼給我。"
     ))
     e.add_field(name="⚠️ 重要：不要設定 IP 白名單", inline=False, value=(
-        "建立 API Key 後，頁面下方有一個 **Access Control List**。\n"
+        "建立 API Key 時，頁面下方有一個 **Access Control List**。\n"
         "**請保持空白，不要填入任何 IP 位址。**\n\n"
-        "如果你填了 IP 限制，機器人將無法使用你的 API Key 建立伺服器，"
-        "導致設定流程失敗。"
+        "如果填了 IP 限制，機器人將無法建立伺服器，導致設定流程失敗。"
     ))
     await message.channel.send(embed=e)
 

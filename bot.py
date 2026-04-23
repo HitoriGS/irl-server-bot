@@ -328,21 +328,12 @@ async def send_completion(user: discord.User, result: dict):
     )
     await user.send(embed=e)
 
-    # 2. 三個設定檔
+    # 2. 產生設定檔
     config_json = generate_config_json(tid, ip, obs_pw, obs_port)
     env_content = generate_env_file(tid, oauth)
     obs_json    = generate_obs_json(ip)
 
-    await user.send(
-        content="📦 **以下是你的設定檔，請下載保存：**",
-        files=[
-            discord.File(io.BytesIO(config_json.encode()), filename="config.json"),
-            discord.File(io.BytesIO(env_content.encode()), filename=".env"),
-            discord.File(io.BytesIO(obs_json.encode()),    filename="IRL.json"),
-        ],
-    )
-
-    # 3. NOALBS 安裝說明
+    # 3. NOALBS 安裝說明 + config.json / .env
     e2 = embed("📥 STEP 1 ── 安裝 NOALBS", color=0x1565c0)
     e2.add_field(name="下載連結", value=NOALBS_URL, inline=False)
     e2.add_field(name="安裝步驟", inline=False, value=(
@@ -350,7 +341,7 @@ async def send_completion(user: discord.User, result: dict):
         "　　🪟 Windows：`x86_64-windows`\n"
         "　　🍎 Mac（M1 以後）：`aarch64-apple`\n"
         "　　🍎 Mac（Intel）：`x86_64-apple`\n"
-        "2. 解壓縮後，將上方的 `config.json` 和 `.env` **覆蓋**放入資料夾\n"
+        "2. 解壓縮後，將下方附上的 `config.json` 和 `.env` **覆蓋**放入資料夾\n"
         "3. 完成！"
     ))
     e2.add_field(name="⚠️ 注意：`.env` 檔案重新命名", inline=False, value=(
@@ -358,27 +349,40 @@ async def send_completion(user: discord.User, result: dict):
         "放入資料夾前，請先將檔名改回 **`.env`**（加上開頭的點）。"
     ))
     await user.send(embed=e2)
+    await user.send(
+        content="⬇️ **請下載以下兩個檔案：**",
+        files=[
+            discord.File(io.BytesIO(config_json.encode()), filename="config.json"),
+            discord.File(io.BytesIO(env_content.encode()), filename=".env"),
+        ],
+    )
 
-    # 4. OBS 場景集匯入說明
+    # 4. OBS 場景集匯入說明 + IRL.json
     e3 = embed("🎬 STEP 2 ── 匯入 OBS 場景集", color=0x1565c0)
     e3.add_field(name="場景集資料夾路徑", inline=False, value=(
         "**Windows：**\n`%APPDATA%\\obs-studio\\basic\\scenes\\`\n\n"
         "**Mac：**\n`~/Library/Application Support/obs-studio/basic/scenes/`"
     ))
     e3.add_field(name="匯入步驟", inline=False, value=(
-        "1. 將 `IRL.json` 放入上方資料夾\n"
+        "1. 將下方附上的 `IRL.json` 放入上方資料夾\n"
         "2. 開啟 OBS → 上方選單 **場景集** → **匯入**\n"
         "3. 選擇 `IRL.json` 匯入\n"
         "4. 再次點 **場景集** → 切換到 **IRL**"
     ))
     await user.send(embed=e3)
+    await user.send(
+        content="⬇️ **請下載以下檔案：**",
+        files=[
+            discord.File(io.BytesIO(obs_json.encode()), filename="IRL.json"),
+        ],
+    )
 
     # 5. 開台流程提示
     e4 = embed("▶️ STEP 3 ── 每次開台的流程", color=0x1565c0)
     e4.add_field(name="開台前必做", inline=False, value=(
         "1. 開啟 **OBS**（確認場景集為 IRL）\n"
         "2. 開啟 **NOALBS**（執行 `noalbs.exe`）\n"
-        "3. 在 OBS 按下 **開始串流**\n"
+        "3. 在聊天室輸入 `!start` 開始實況\n"
         "4. 手機 App 輸入推流位址開始推流\n\n"
         "⚠️ OBS 和 NOALBS **兩個都要開**，缺一不可！"
     ))
@@ -391,8 +395,8 @@ async def send_completion(user: discord.User, result: dict):
         "`!b` — 查詢目前推流 Bitrate\n"
         "`!ss`（或 `!switch`）— 手動切換場景（主播可用）\n"
         "`!r`（或 `!refresh`）— 重新整理連線（管理員可用）\n"
-        "`!start` — 手動開始串流（主播可用）\n"
-        "`!stop` — 手動停止串流（主播可用）\n\n"
+        "`!start` — 手動開始實況（主播可用）\n"
+        "`!stop` — 手動停止實況（主播可用）\n\n"
         "NOALBS 也會在場景自動切換時於聊天室發送通知訊息。"
     ))
     e5.add_field(name="🚌 揪團出遊時自動停播", inline=False, value=(

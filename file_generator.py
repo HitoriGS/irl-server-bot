@@ -325,7 +325,7 @@ OBS_TEMPLATE = {
             "id": "text_ft2_source",
             "versioned_id": "text_ft2_source_v2",
             "settings": {
-                "font": {"face": "Noto Sans Mono CJK TC", "style": "Regular", "size": 96, "flags": 0},
+                "font": {"face": "Noto Sans Mono CJK TC", "style": "Regular", "size": 72, "flags": 0},
                 "text": "訊號不良...請稍候（可自行修改文字內容及位置）",
             },
             "mixers": 0, "sync": 0, "flags": 0,

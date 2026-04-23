@@ -209,6 +209,10 @@ async def handle_obs_port(message: discord.Message, state: dict):
     e.add_field(name="OAuth Token",  value=f'`{d["twitch_oauth"][:8]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS 密碼",     value=f'`{d["obs_password"][:3]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS Port",     value=f'`{d["obs_port"]}`',                       inline=True)
+    e.add_field(name="🖥️ 伺服器規格", inline=False, value=(
+        "1 vCPU・1 GB RAM・25 GB SSD\n"
+        "月費：**$6 USD／月**（依實際使用天數按比例計算）"
+    ))
     e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
         "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"
         "輸入 `確認` 開始 ／ `取消` 中止"
@@ -312,18 +316,8 @@ async def send_completion(user: discord.User, result: dict):
     srt_push = f"srtla://{ip}:5000?streamid=live/stream/belabox"
     srt_pull = f"srt://{ip}:8282?streamid=play/stream/belabox"
 
-    moblin_url = (
-        f"moblin://?%7B%22streams%22:%5B%7B%22name%22:%22Vultr-SRT%22,"
-        f"%22url%22:%22srtla://{ip}:5000?streamid=live/stream/belabox%22,"
-        f"%22video%22:%7B%22codec%22:%22H.265/HEVC%22%7D%7D%5D%7D"
-    )
-    larix_url = (
-        f"larix://set/v1?"
-        f"conn%5B%5D%5Burl%5D=srtla%3A%2F%2F{ip}%3A5000"
-        f"&conn%5B%5D%5Bname%5D=Vultr-SRT"
-        f"&conn%5B%5D%5Bsrtlatency%5D=2500"
-        f"&conn%5B%5D%5Bsrtstreamid%5D=live%2Fstream%2Fbelabox"
-    )
+    moblin_url = f"https://hitorigs.live/irl/moblin/?ip={ip}"
+    larix_url  = f"https://hitorigs.live/irl/larix/?ip={ip}"
 
     # 1. 摘要 embed
     e = embed("🎉 IRL 伺服器架設完成！", color=0x43a047)

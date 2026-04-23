@@ -258,13 +258,10 @@ def _deploy_blocking(data: dict, progress) -> dict:
     progress("🔍 查詢 Ubuntu 22.04 OS ID...")
     os_id = vultr.get_ubuntu_os_id()
 
-    progress("📋 建立伺服器啟動腳本...")
-    script_id = vultr.create_startup_script(f"irl-bot-{data['twitch_id']}")
-
     instance_id = None
     try:
         progress(f"🖥️ 正在 {data['region_name']} 建立伺服器（約 1–2 分鐘）...")
-        instance    = vultr.create_instance(data["region_id"], os_id, script_id)
+        instance    = vultr.create_instance(data["region_id"], os_id)
         instance_id = instance["id"]
 
         progress("⏳ 等待伺服器啟動...")
@@ -272,7 +269,6 @@ def _deploy_blocking(data: dict, progress) -> dict:
         progress(f"✅ 伺服器啟動完成！IP：`{server_ip}`")
 
         progress("⚙️ 伺服器正在背景自動安裝 Docker 與啟動容器（約 3–5 分鐘後即可使用）...")
-        time.sleep(10)
 
         progress("📝 正在產生設定檔...")
         return {
@@ -286,8 +282,6 @@ def _deploy_blocking(data: dict, progress) -> dict:
         if instance_id:
             vultr.delete_instance(instance_id)
         raise
-    finally:
-        vultr.delete_startup_script(script_id)
 
 
 async def send_completion(user: discord.User, result: dict):

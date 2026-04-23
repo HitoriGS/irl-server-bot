@@ -36,16 +36,28 @@ class VultrAPI:
 
     # ── Marketplace App ────────────────────────────────────────────────────
     def get_docker_app_id(self):
-        try:
-            resp = self._get("/applications", params={"type": "one-click", "per_page": 100})
-            if resp.status_code != 200:
-                return None
-            for app in resp.json().get("applications", []):
-                if "docker" in app.get("short_name", "").lower():
-                    logger.info(f"Docker app found: id={app['id']}")
-                    return app["id"]
-        except Exception as e:
-            logger.error(f"get_docker_app_id error: {e}")
+        """查詢 Vultr 上的 Docker App ID，依序嘗試不同 type 參數。"""
+        type_filters = [None, "one-click", "marketplace"]
+        for type_filter in type_filters:
+            try:
+                params = {"per_page": 500}
+                if type_filter:
+                    params["type"] = type_filter
+                resp = self._get("/applications", params=params)
+                if resp.status_code != 200:
+                    continue
+                apps = resp.json().get("applications", [])
+                logger.info(f"[type={type_filter}] {len(apps)} apps: "
+                            + str([a.get("short_name") for a in apps[:20]]))
+                for app in apps:
+                    short = app.get("short_name", "").lower()
+                    name  = app.get("name", "").lower()
+                    if "docker" in short or "docker" in name:
+                        logger.info(f"Docker matched: id={app['id']} short={short}")
+                        return app["id"]
+            except Exception as e:
+                logger.error(f"get_docker_app_id error (type={type_filter}): {e}")
+        logger.error("Docker app not found in any type filter.")
         return None
 
     # ── SSH Key ────────────────────────────────────────────────────────────

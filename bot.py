@@ -323,7 +323,7 @@ async def send_completion(user: discord.User, result: dict):
     )
     e.add_field(
         name="💡 提示",
-        value="未來如需刪除伺服器，請使用 `/delete` 指令，並回到此訊息點開 API Key 貼上。",
+        value="未來如需刪除伺服器，請回到 HitoriGS 的 Discord 伺服器使用 `/irldelete` 指令，並回到此訊息點開 API Key 貼上。",
         inline=False,
     )
     await user.send(embed=e)

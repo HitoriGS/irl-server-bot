@@ -8,7 +8,6 @@ import discord
 from discord.ext import commands
 
 from file_generator import generate_config_json, generate_env_file, generate_obs_json
-from ssh_setup import generate_ssh_key, setup_server_ssh
 from vultr_api import VultrAPI
 
 # ── 設定 ───────────────────────────────────────────────────────────────────────
@@ -94,12 +93,20 @@ async def handle_disclaimer(message: discord.Message, state: dict):
     # 同意後進入 STEP 1
     state["step"] = "awaiting_vultr_key"
     e = embed("✅ 已確認聲明，開始設定！", color=0x43a047)
-    e.add_field(name="STEP 1 ── 註冊 Vultr", inline=False, value=(
+    e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
         f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
         f"👉 {VULTR_REFERRAL}\n\n"
-        f"**取得 API Key：**\n"
-        f"登入後前往 右上角頭像 → **Account** → **API**\n"
-        f"啟用 Personal Access Token 後複製，貼給我。"
+        f"**取得 API Key 步驟：**\n"
+        f"1. 登入後前往 右上角頭像 → **Account** → **API**\n"
+        f"2. 點擊 **Create API Key** 建立一組新的 Key\n"
+        f"3. 複製產生的 Key 值（**只會顯示一次，請立刻複製**）\n"
+        f"4. 貼給我"
+    ))
+    e.add_field(name="⚠️ 重要：不要設定 IP 白名單", inline=False, value=(
+        "建立 API Key 後，頁面下方有一個 **Access Control List**。\n"
+        "**請保持空白，不要填入任何 IP 位址。**\n\n"
+        "如果你填了 IP 限制，機器人將無法使用你的 API Key 建立伺服器，"
+        "導致設定流程失敗。"
     ))
     await message.channel.send(embed=e)
 
@@ -244,29 +251,28 @@ async def run_deployment(user: discord.User, state: dict):
 
 
 def _deploy_blocking(data: dict, progress) -> dict:
-    """在執行緒中跑的阻塞式部署邏輯。"""
+    """在執行緒中跑的阻塞式部署邏輯（Startup Script 版）。"""
+    import time
     vultr = VultrAPI(data["vultr_key"])
 
-    progress("🔍 查詢 Vultr Docker Image...")
-    app_id = vultr.get_docker_app_id()
-    if not app_id:
-        raise RuntimeError("無法取得 Vultr Docker Marketplace App ID，請聯繫管理員。")
+    progress("🔍 查詢 Ubuntu 22.04 OS ID...")
+    os_id = vultr.get_ubuntu_os_id()
 
-    progress("🔑 產生 SSH 金鑰...")
-    private_key, public_key_str = generate_ssh_key()
-    ssh_key_id = vultr.add_ssh_key(f"irl-bot-{data['twitch_id']}", public_key_str)
+    progress("📋 建立伺服器啟動腳本...")
+    script_id = vultr.create_startup_script(f"irl-bot-{data['twitch_id']}")
 
     instance_id = None
     try:
         progress(f"🖥️ 正在 {data['region_name']} 建立伺服器（約 1–2 分鐘）...")
-        instance    = vultr.create_instance(data["region_id"], ssh_key_id, app_id)
+        instance    = vultr.create_instance(data["region_id"], os_id, script_id)
         instance_id = instance["id"]
 
         progress("⏳ 等待伺服器啟動...")
         server_ip = vultr.wait_for_active(instance_id)
         progress(f"✅ 伺服器啟動完成！IP：`{server_ip}`")
 
-        setup_server_ssh(server_ip, private_key, progress_cb=progress)
+        progress("⚙️ 伺服器正在背景自動安裝 Docker 與啟動容器（約 3–5 分鐘後即可使用）...")
+        time.sleep(10)
 
         progress("📝 正在產生設定檔...")
         return {
@@ -281,7 +287,7 @@ def _deploy_blocking(data: dict, progress) -> dict:
             vultr.delete_instance(instance_id)
         raise
     finally:
-        vultr.delete_ssh_key(ssh_key_id)
+        vultr.delete_startup_script(script_id)
 
 
 async def send_completion(user: discord.User, result: dict):

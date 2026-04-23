@@ -355,10 +355,16 @@ async def send_completion(user: discord.User, result: dict):
     e5.add_field(name="可用指令", inline=False, value=(
         "以下指令可在 Twitch 聊天室直接輸入：\n\n"
         "`!b` — 查詢目前推流 Bitrate\n"
-        "`!f`（或 `!fix`）— 強制刷新畫面（版主可用）\n"
-        "`!ss`（或 `!switch`）— 手動切換場景（管理員可用）\n"
-        "`!r`（或 `!refresh`）— 重新整理連線（版主可用）\n\n"
+        "`!ss`（或 `!switch`）— 手動切換場景（主播可用）\n"
+        "`!r`（或 `!refresh`）— 重新整理連線（管理員可用）\n"
+        "`!start` — 手動開始串流（主播可用）\n"
+        "`!stop` — 手動停止串流（主播可用）\n\n"
         "NOALBS 也會在場景自動切換時於聊天室發送通知訊息。"
+    ))
+    e5.add_field(name="🚌 揪團出遊時自動停播", inline=False, value=(
+        "當你在 Twitch 對其他頻道發起 **Raid（揪團）** 時，"
+        "NOALBS 會偵測到 Raid 動作並**自動停止串流**，"
+        "不需要手動回到電腦按停止，非常適合 IRL 結束時直接揪團收台。"
     ))
     await user.send(embed=e5)
 

@@ -6,7 +6,7 @@ CONFIG_TEMPLATE = {
     "user": {"id": None, "name": "{{TWITCH_ID}}", "passwordHash": None},
     "switcher": {
         "bitrateSwitcherEnabled": True,
-        "onlySwitchWhenStreaming": False,
+        "onlySwitchWhenStreaming": True,
         "instantlySwitchOnRecover": True,
         "autoSwitchNotification": True,
         "retryAttempts": 5,

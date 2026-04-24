@@ -133,11 +133,17 @@ async def handle_vultr_key(message: discord.Message, state: dict):
     api_key = message.content.strip()
     await message.channel.send("⏳ 正在驗證 API Key...")
     loop = asyncio.get_running_loop()
-    valid = await loop.run_in_executor(executor, VultrAPI(api_key).validate_key)
+    vultr = VultrAPI(api_key)
+    valid = await loop.run_in_executor(executor, vultr.validate_key)
     if not valid:
         await message.channel.send("❌ API Key 無效，請確認後重新貼上。")
         return
     state["data"]["vultr_key"] = api_key
+    try:
+        plan_info = await loop.run_in_executor(executor, vultr.get_plan_info)
+        state["data"]["plan_info"] = plan_info
+    except Exception:
+        state["data"]["plan_info"] = {}
     state["step"] = "awaiting_region"
     region_list = "\n".join(f"`{k}` — {v[0]}" for k, v in REGIONS.items())
     e = embed("✅ API Key 驗證成功！", color=0x43a047)
@@ -227,9 +233,17 @@ async def handle_obs_port(message: discord.Message, state: dict):
     e.add_field(name="OAuth Token",  value=f'`{d["twitch_oauth"][:8]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS 密碼",     value=f'`{d["obs_password"][:3]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS Port",     value=f'`{d["obs_port"]}`',                       inline=True)
+    p = state["data"].get("plan_info", {})
+    vcpu      = p.get("vcpu_count", "?")
+    ram_gb    = round(p["ram"] / 1024) if p.get("ram") else "?"
+    disk      = p.get("disk", "?")
+    bw_tb     = p["bandwidth"] / 1024 if p.get("bandwidth") else None
+    bw_str    = f"{bw_tb:g} TB" if bw_tb and bw_tb >= 1 else (f"{p['bandwidth']} GB" if p.get("bandwidth") else "?")
+    cost      = int(p["monthly_cost"]) if p.get("monthly_cost") and p["monthly_cost"] == int(p["monthly_cost"]) else p.get("monthly_cost", "?")
     e.add_field(name="🖥️ 伺服器規格", inline=False, value=(
-        "1 vCPU・1 GB RAM・25 GB SSD\n"
-        "月費：**$6 USD／月**（依實際使用天數按比例計算）"
+        f"{vcpu} vCPU・{ram_gb} GB RAM・{disk} GB SSD\n"
+        f"每月流量：**{bw_str}**\n"
+        f"月費：**${cost} USD／月**（依實際使用天數按比例計算）"
     ))
     e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
         "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"

@@ -133,6 +133,15 @@ class VultrAPI:
                 break
         return instances
 
+    def get_plan_info(self) -> dict:
+        """取得目前使用方案的規格資訊（vCPU、RAM、Disk、Bandwidth、月費）。"""
+        resp = self._get("/plans", params={"per_page": 500, "type": "vhp"})
+        resp.raise_for_status()
+        for plan in resp.json().get("plans", []):
+            if plan["id"] == PLAN:
+                return plan
+        raise RuntimeError(f"找不到方案資訊：{PLAN}")
+
     def delete_instance(self, instance_id: str):
         try:
             self._delete(f"/instances/{instance_id}")

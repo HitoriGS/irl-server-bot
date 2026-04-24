@@ -383,10 +383,10 @@ async def send_completion(user: discord.User, result: dict):
     e = embed("🎉 設定完成！以下是你的伺服器資訊", color=0x43a047)
     e.add_field(name="📡 推流位址（手機 App 使用）",    value=f"```{srt_push}```", inline=False)
     e.add_field(name="📱 手機 App 一鍵設定", inline=False, value=(
-        f"[Moblin 點此設定]({moblin_url})\n\n"
-        f"[IRL Pro 點此設定]({larix_url})"
+        f"[Moblin 點此設定（請使用手機點擊連結）]({moblin_url})\n\n"
+        f"[IRL Pro 點此設定（請使用手機點擊連結）]({larix_url})\n"
     ))
-    e.add_field(name="🎬 拉流位址（OBS 媒體來源，已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
+    e.add_field(name="🎬 拉流位址（OBS 媒體來源已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
     e.add_field(name="🖥️ 伺服器 IP",                   value=f"`{ip}`",           inline=True)
     e.add_field(name="💰 月費",                         value="約 $6 USD",         inline=True)
     e.add_field(

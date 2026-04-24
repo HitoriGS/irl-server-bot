@@ -24,6 +24,7 @@ docker run -d --name belabox-receiver \
   --restart=always \
   --pull=always \
   luminousaj/belabox-receiver:latest
+echo "0 3 * * 0 root docker image prune -f" >> /etc/cron.d/docker-cleanup
 """
 
 # Vultr user_data 需要 base64 編碼

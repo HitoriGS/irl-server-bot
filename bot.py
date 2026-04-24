@@ -3,6 +3,7 @@ import io
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord.ext import commands
@@ -17,7 +18,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
+DISCORD_TOKEN  = os.environ["DISCORD_TOKEN"]
+LOG_CHANNEL_ID = os.environ.get("LOG_CHANNEL_ID")
 
 VULTR_REFERRAL   = "https://www.vultr.com/?ref=9097831"
 TWITCH_TOKEN_URL = "https://twitchtokengenerator.com/"
@@ -46,6 +48,22 @@ user_states: dict[int, dict] = {}
 # ── 工具函式 ───────────────────────────────────────────────────────────────────
 def embed(title="", desc="", color=0x5c6bc0) -> discord.Embed:
     return discord.Embed(title=title, description=desc, color=color)
+
+async def send_admin_log(user: discord.User, action: str):
+    if not LOG_CHANNEL_ID:
+        return
+    channel = bot.get_channel(int(LOG_CHANNEL_ID))
+    if not channel:
+        return
+    tw = timezone(timedelta(hours=8))
+    now = datetime.now(tw).strftime("%Y/%m/%d %H:%M:%S")
+    color = 0x43a047 if "部署" in action else 0xd32f2f
+    e = embed(title="📋 操作紀錄", color=color)
+    e.add_field(name="使用者", value=f"{user.display_name} (`{user.id}`)", inline=False)
+    e.add_field(name="操作",   value=action,                               inline=False)
+    e.add_field(name="時間",   value=now,                                  inline=False)
+    await channel.send(embed=e)
+
 
 
 # ── STEP 處理函式 ──────────────────────────────────────────────────────────────
@@ -114,7 +132,7 @@ async def handle_disclaimer(message: discord.Message, state: dict):
 async def handle_vultr_key(message: discord.Message, state: dict):
     api_key = message.content.strip()
     await message.channel.send("⏳ 正在驗證 API Key...")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     valid = await loop.run_in_executor(executor, VultrAPI(api_key).validate_key)
     if not valid:
         await message.channel.send("❌ API Key 無效，請確認後重新貼上。")
@@ -134,7 +152,7 @@ async def handle_vultr_key(message: discord.Message, state: dict):
 async def handle_region(message: discord.Message, state: dict):
     choice = message.content.strip()
     if choice not in REGIONS:
-        await message.channel.send("❌ 請輸入 1–6 之間的數字。")
+        await message.channel.send("❌ 請輸入 1–5 之間的數字。")
         return
     name, region_id = REGIONS[choice]
     state["data"]["region_name"] = name
@@ -237,7 +255,7 @@ async def handle_confirmation(message: discord.Message, state: dict):
 # ── 部署流程 ───────────────────────────────────────────────────────────────────
 
 async def run_deployment(user: discord.User, state: dict):
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     queue: asyncio.Queue[str] = asyncio.Queue()
 
     def progress(msg: str):
@@ -420,7 +438,7 @@ async def send_completion(user: discord.User, result: dict):
     await user.send(embed=e5)
 
     await user.send("🎊 **全部完成！祝你直播順利！** 如有任何問題歡迎回到伺服器詢問。")
-
+    await send_admin_log(user, "✅ 部署伺服器完成")
 
 # ── 刪除伺服器流程 ─────────────────────────────────────────────────────────────
 
@@ -437,7 +455,7 @@ async def send_delete_welcome(user: discord.User):
 async def handle_delete_key(message: discord.Message, state: dict):
     api_key = message.content.strip()
     await message.channel.send("⏳ 正在驗證 API Key 並查詢伺服器...")
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     vultr = VultrAPI(api_key)
     valid = await loop.run_in_executor(executor, vultr.validate_key)
     if not valid:
@@ -537,7 +555,7 @@ async def handle_delete_confirm_3(message: discord.Message, state: dict):
     selected = state["data"]["selected"]
     await message.channel.send(f"🗑️ **正在刪除伺服器 `{selected['ip']}`...**")
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     vultr = VultrAPI(state["data"]["vultr_key"])
     try:
         await loop.run_in_executor(executor, lambda: vultr.delete_instance(selected["id"]))
@@ -545,6 +563,7 @@ async def handle_delete_confirm_3(message: discord.Message, state: dict):
             f"✅ **伺服器 `{selected['ip']}` 已成功刪除。**\n"
             "Vultr 帳單將於本月結算時按比例計算，不會繼續收費。"
         )
+        await send_admin_log(message.author, "🗑️ 刪除伺服器完成")
     except Exception as exc:
         logger.exception("Delete instance failed")
         await message.channel.send(
@@ -575,6 +594,11 @@ async def delete_command(interaction: discord.Interaction):
             "⚠️ 目前有操作正在進行中，請等待完成後再試。", ephemeral=True
         )
         return
+    if current_step:
+        await interaction.response.send_message(
+            "⚠️ 你目前已有流程進行中，請先在私訊輸入 `取消` 中止後再試。", ephemeral=True
+        )
+        return
     await interaction.response.defer(ephemeral=True)
     try:
         await send_delete_welcome(user)
@@ -588,9 +612,15 @@ async def delete_command(interaction: discord.Interaction):
 @bot.tree.command(name="irlsetup", description="開始架設你的 IRL 直播伺服器 🎮")
 async def setup_command(interaction: discord.Interaction):
     user = interaction.user
-    if user_states.get(user.id, {}).get("step") == "deploying":
+    current_step = user_states.get(user.id, {}).get("step", "")
+    if current_step in ("deploying", "deleting"):
         await interaction.response.send_message(
-            "⚠️ 你目前已有部署進行中，請等待完成後再試。", ephemeral=True
+            "⚠️ 目前有操作正在進行中，請等待完成後再試。", ephemeral=True
+        )
+        return
+    if current_step:
+        await interaction.response.send_message(
+            "⚠️ 你目前已有流程進行中，請先在私訊輸入 `取消` 中止後再試。", ephemeral=True
         )
         return
     await interaction.response.defer(ephemeral=True)

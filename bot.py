@@ -110,25 +110,54 @@ async def handle_disclaimer(message: discord.Message, state: dict):
         await message.channel.send("請輸入 `同意` 表示同意聲明並繼續，或輸入 `取消` 中止。")
         return
 
-    # 同意後進入 STEP 1
-    state["step"] = "awaiting_vultr_key"
+    # 同意後選擇架設方式
+    state["step"] = "awaiting_setup_mode"
     e = embed("✅ 已確認聲明，開始設定！", color=0x43a047)
-    e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
-        f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
-        f"👉 {VULTR_REFERRAL}\n\n"
-        f"註冊帳號需綁定 Paypal 或信用卡\n"
-        f"不須預先儲值，可勾選 **I just want to link my credit card.**\n"
-        f"伺服器是月結帳單付款\n\n"
-        f"註冊完成後，請參考以下圖文教學取得 API Key：\n"
-        f"📖 {VULTR_API_GUIDE}\n\n"
-        f"取得 API Key 後貼給我。"
-    ))
-    e.add_field(name="⚠️ 重要：不要設定 IP 白名單", inline=False, value=(
-        "建立 API Key 時，頁面下方有一個 **Access Control List**。\n"
-        "**請保持空白，不要填入任何 IP 位址。**\n\n"
-        "如果填了 IP 限制，機器人將無法建立伺服器，導致設定流程失敗。"
+    e.add_field(name="🔀 選擇架設方式", inline=False, value=(
+        "1️⃣ **全新建立伺服器** — 機器人自動於 Vultr 建立雲端伺服器（約 $6 USD/月）\n"
+        "2️⃣ **已有自己的伺服器** — 你已自行架好 SRT Live Server 等推流環境，"
+        "機器人僅需你的伺服器 IP，直接引導設定 NOALBS\n\n"
+        "請輸入對應數字（`1` 或 `2`）。"
     ))
     await message.channel.send(embed=e)
+
+
+async def handle_setup_mode(message: discord.Message, state: dict):
+    choice = message.content.strip()
+    if choice == "1":
+        state["data"]["mode"] = "vultr"
+        state["step"] = "awaiting_vultr_key"
+        e = embed(color=0x43a047)
+        e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
+            f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
+            f"👉 {VULTR_REFERRAL}\n\n"
+            f"註冊帳號需綁定 Paypal 或信用卡\n"
+            f"不須預先儲值，可勾選 **I just want to link my credit card.**\n"
+            f"伺服器是月結帳單付款\n\n"
+            f"註冊完成後，請參考以下圖文教學取得 API Key：\n"
+            f"📖 {VULTR_API_GUIDE}\n\n"
+            f"取得 API Key 後貼給我。"
+        ))
+        e.add_field(name="⚠️ 重要：不要設定 IP 白名單", inline=False, value=(
+            "建立 API Key 時，頁面下方有一個 **Access Control List**。\n"
+            "**請保持空白，不要填入任何 IP 位址。**\n\n"
+            "如果填了 IP 限制，機器人將無法建立伺服器，導致設定流程失敗。"
+        ))
+        await message.channel.send(embed=e)
+        return
+
+    if choice == "2":
+        state["data"]["mode"] = "self_hosted"
+        state["step"] = "awaiting_server_ip"
+        e = embed(color=0x43a047)
+        e.add_field(name="STEP 1 ── 你的伺服器 IP", inline=False, value=(
+            "請確認你的伺服器已架好 **SRT Live Server** 等推流環境，並開放對應連接埠。\n\n"
+            "請輸入你的伺服器 IP 位址："
+        ))
+        await message.channel.send(embed=e)
+        return
+
+    await message.channel.send("請輸入 `1`（全新建立伺服器）或 `2`（已有自己的伺服器）。")
 
 
 async def handle_vultr_key(message: discord.Message, state: dict):

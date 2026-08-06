@@ -755,6 +755,30 @@ async def handle_delete_confirm_3(message: discord.Message, state: dict):
         user_states.pop(message.author.id, None)
 
 
+# ── STEP_HANDLERS 分派表 ───────────────────────────────────────────────────────
+STEP_HANDLERS = {
+    # 架設流程
+    "awaiting_disclaimer":   handle_disclaimer,
+    "awaiting_setup_mode":   handle_setup_mode,
+    "awaiting_vultr_key":    handle_vultr_key,
+    "awaiting_region":       handle_region,
+    "awaiting_server_ip":    handle_server_ip,
+    "awaiting_twitch_id":    handle_twitch_id,
+    "awaiting_twitch_oauth": handle_twitch_oauth,
+    "awaiting_obs_password": handle_obs_password,
+    "awaiting_obs_port":     handle_obs_port,
+    "confirming":            handle_confirmation,
+    "deploying":             lambda m, s: m.channel.send("⏳ 部署正在進行中，請耐心等候..."),
+    # 刪除流程
+    "delete_awaiting_key":   handle_delete_key,
+    "delete_select":         handle_delete_select,
+    "delete_confirm_1":      handle_delete_confirm_1,
+    "delete_confirm_2":      handle_delete_confirm_2,
+    "delete_confirm_3":      handle_delete_confirm_3,
+    "deleting":              lambda m, s: m.channel.send("⏳ 刪除正在進行中，請耐心等候..."),
+}
+
+
 # ── Discord 事件 ───────────────────────────────────────────────────────────────
 
 @bot.event
@@ -830,26 +854,7 @@ async def on_message(message: discord.Message):
         return
 
     state = user_states[uid]
-    handlers = {
-        # 架設流程
-        "awaiting_disclaimer":   handle_disclaimer,
-        "awaiting_vultr_key":    handle_vultr_key,
-        "awaiting_region":       handle_region,
-        "awaiting_twitch_id":    handle_twitch_id,
-        "awaiting_twitch_oauth": handle_twitch_oauth,
-        "awaiting_obs_password": handle_obs_password,
-        "awaiting_obs_port":     handle_obs_port,
-        "confirming":            handle_confirmation,
-        "deploying":             lambda m, s: m.channel.send("⏳ 部署正在進行中，請耐心等候..."),
-        # 刪除流程
-        "delete_awaiting_key":   handle_delete_key,
-        "delete_select":         handle_delete_select,
-        "delete_confirm_1":      handle_delete_confirm_1,
-        "delete_confirm_2":      handle_delete_confirm_2,
-        "delete_confirm_3":      handle_delete_confirm_3,
-        "deleting":              lambda m, s: m.channel.send("⏳ 刪除正在進行中，請耐心等候..."),
-    }
-    handler = handlers.get(state["step"])
+    handler = STEP_HANDLERS.get(state["step"])
     if handler:
         await handler(message, state)
 

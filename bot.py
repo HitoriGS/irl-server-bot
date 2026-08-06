@@ -278,27 +278,35 @@ async def handle_obs_port(message: discord.Message, state: dict):
     state["step"] = "confirming"
     d = state["data"]
     e = embed("📋 請確認以下資料", color=0xff9800)
-    e.add_field(name="伺服器地區",   value=d["region_name"],                            inline=True)
+    if d["mode"] == "self_hosted":
+        e.add_field(name="伺服器 IP",     value=d["server_ip"],                              inline=True)
+    else:
+        e.add_field(name="伺服器地區",   value=d["region_name"],                            inline=True)
     e.add_field(name="Twitch ID",    value=d["twitch_id"],                              inline=True)
     e.add_field(name="OAuth Token",  value=f'`{d["twitch_oauth"][:8]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS 密碼",     value=f'`{d["obs_password"][:3]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS Port",     value=f'`{d["obs_port"]}`',                       inline=True)
-    p = state["data"].get("plan_info", {})
-    vcpu      = p.get("vcpu_count", "?")
-    ram_gb    = round(p["ram"] / 1024) if p.get("ram") else "?"
-    disk      = p.get("disk", "?")
-    bw_tb     = p["bandwidth"] / 1024 if p.get("bandwidth") else None
-    bw_str    = f"{bw_tb:g} TB" if bw_tb and bw_tb >= 1 else (f"{p['bandwidth']} GB" if p.get("bandwidth") else "?")
-    cost      = int(p["monthly_cost"]) if p.get("monthly_cost") and p["monthly_cost"] == int(p["monthly_cost"]) else p.get("monthly_cost", "?")
-    e.add_field(name="🖥️ 伺服器規格", inline=False, value=(
-        f"{vcpu} vCPU・{ram_gb} GB RAM・{disk} GB SSD\n"
-        f"每月流量：**{bw_str}**\n"
-        f"月費：**${cost} USD／月**（依實際使用天數按比例計算）"
-    ))
-    e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
-        "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"
-        "輸入 `確認` 開始 ／ `取消` 中止"
-    ))
+    if d["mode"] == "vultr":
+        p = state["data"].get("plan_info", {})
+        vcpu      = p.get("vcpu_count", "?")
+        ram_gb    = round(p["ram"] / 1024) if p.get("ram") else "?"
+        disk      = p.get("disk", "?")
+        bw_tb     = p["bandwidth"] / 1024 if p.get("bandwidth") else None
+        bw_str    = f"{bw_tb:g} TB" if bw_tb and bw_tb >= 1 else (f"{p['bandwidth']} GB" if p.get("bandwidth") else "?")
+        cost      = int(p["monthly_cost"]) if p.get("monthly_cost") and p["monthly_cost"] == int(p["monthly_cost"]) else p.get("monthly_cost", "?")
+        e.add_field(name="🖥️ 伺服器規格", inline=False, value=(
+            f"{vcpu} vCPU・{ram_gb} GB RAM・{disk} GB SSD\n"
+            f"每月流量：**{bw_str}**\n"
+            f"月費：**${cost} USD／月**（依實際使用天數按比例計算）"
+        ))
+        e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
+            "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"
+            "輸入 `確認` 開始 ／ `取消` 中止"
+        ))
+    else:
+        e.add_field(name="⚠️ 確認後將產生設定檔", inline=False, value=(
+            "輸入 `確認` 開始 ／ `取消` 中止"
+        ))
     await message.channel.send(embed=e)
 
 

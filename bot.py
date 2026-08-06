@@ -70,6 +70,11 @@ async def send_admin_log(user: discord.User, action: str):
 
 # ── STEP 處理函式 ──────────────────────────────────────────────────────────────
 
+def _step_num(base: int, mode: str) -> int:
+    """自架伺服器模式少了 2 個前置步驟（Vultr Key + 地區選擇合併為 1 個 IP 步驟），STEP 編號少 1。"""
+    return base - 1 if mode == "self_hosted" else base
+
+
 async def send_welcome(user: discord.User):
     user_states[user.id] = {"step": "awaiting_disclaimer", "data": {}}
 
@@ -222,8 +227,9 @@ async def handle_twitch_id(message: discord.Message, state: dict):
         return
     state["data"]["twitch_id"] = tid
     state["step"] = "awaiting_twitch_oauth"
+    step_num = _step_num(4, state["data"]["mode"])
     e = embed(color=0x9146ff)
-    e.add_field(name="STEP 4 ── Twitch OAuth 金鑰", inline=False, value=(
+    e.add_field(name=f"STEP {step_num} ── Twitch OAuth 金鑰", inline=False, value=(
         f"請前往以下網址取得 OAuth Token：\n"
         f"👉 {TWITCH_TOKEN_URL}\n\n"
         f"**步驟：**\n"
@@ -241,8 +247,9 @@ async def handle_twitch_oauth(message: discord.Message, state: dict):
         token = token[6:]
     state["data"]["twitch_oauth"] = token
     state["step"] = "awaiting_obs_password"
+    step_num = _step_num(5, state["data"]["mode"])
     e = embed(color=0x43a047)
-    e.add_field(name="STEP 5 ── OBS WebSocket 密碼", inline=False, value=(
+    e.add_field(name=f"STEP {step_num} ── OBS WebSocket 密碼", inline=False, value=(
         "NOALBS 需透過 OBS WebSocket 控制場景切換。\n\n"
         "請到 OBS → **工具** → **WebSocket 伺服器設定** → 查看或設定密碼\n\n"
         "請輸入你的 OBS WebSocket 密碼："
@@ -253,8 +260,9 @@ async def handle_twitch_oauth(message: discord.Message, state: dict):
 async def handle_obs_password(message: discord.Message, state: dict):
     state["data"]["obs_password"] = message.content.strip()
     state["step"] = "awaiting_obs_port"
+    step_num = _step_num(6, state["data"]["mode"])
     e = embed(color=0x43a047)
-    e.add_field(name="STEP 6 ── OBS WebSocket Port", inline=False, value=(
+    e.add_field(name=f"STEP {step_num} ── OBS WebSocket Port", inline=False, value=(
         "請到 OBS → **工具** → **WebSocket 伺服器設定** → 查看伺服器連接埠\n\n"
         "預設為 `4455`，如果你沒有更改過，直接輸入 `4455` 即可。"
     ))

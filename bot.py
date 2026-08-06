@@ -160,6 +160,17 @@ async def handle_setup_mode(message: discord.Message, state: dict):
     await message.channel.send("請輸入 `1`（全新建立伺服器）或 `2`（已有自己的伺服器）。")
 
 
+async def handle_server_ip(message: discord.Message, state: dict):
+    state["data"]["server_ip"] = message.content.strip()
+    state["step"] = "awaiting_twitch_id"
+    e = embed(color=0x43a047)
+    e.add_field(name="STEP 2 ── Twitch 頻道 ID", inline=False, value=(
+        "請輸入你的 Twitch 頻道名稱（小寫英文，不含 @）：\n"
+        "例如：`hitorigs`"
+    ))
+    await message.channel.send(embed=e)
+
+
 async def handle_vultr_key(message: discord.Message, state: dict):
     api_key = message.content.strip()
     await message.channel.send("⏳ 正在驗證 API Key...")

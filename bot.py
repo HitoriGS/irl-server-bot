@@ -319,6 +319,14 @@ async def handle_confirmation(message: discord.Message, state: dict):
     if text != "確認":
         await message.channel.send("請輸入 `確認` 或 `取消`。")
         return
+
+    if state["data"]["mode"] == "self_hosted":
+        state["step"] = "completing"
+        await message.channel.send("🚀 **產生設定檔中...**")
+        await send_self_hosted_completion(message.author, state)
+        user_states.pop(message.author.id, None)
+        return
+
     state["step"] = "deploying"
     await message.channel.send("🚀 **開始部署！** 我會隨時回報進度，請稍候...")
     asyncio.create_task(run_deployment(message.author, state))
@@ -511,6 +519,108 @@ async def send_completion(user: discord.User, result: dict):
 
     await user.send("🎊 **全部完成！祝你直播順利！** 如有任何問題歡迎回到伺服器詢問。")
     await send_admin_log(user, "✅ 部署伺服器完成")
+
+
+async def send_self_hosted_completion(user: discord.User, state: dict):
+    """自架伺服器模式的完成流程，不呼叫 Vultr API。"""
+    d        = state["data"]
+    ip       = d["server_ip"]
+    tid      = d["twitch_id"]
+    oauth    = d["twitch_oauth"]
+    obs_pw   = d["obs_password"]
+    obs_port = d["obs_port"]
+
+    srt_push = f"srtla://{ip}:5000?streamid=live/stream/belabox"
+    srt_pull = f"srt://{ip}:8282?streamid=play/stream/belabox"
+
+    moblin_url = f"https://hitorigs.live/irl/moblin/?ip={ip}"
+    larix_url  = f"https://hitorigs.live/irl/larix/?ip={ip}"
+
+    config_json = generate_config_json(tid, ip, obs_pw, obs_port)
+    env_content = generate_env_file(tid, oauth)
+    obs_json    = generate_obs_json(ip)
+
+    e1 = embed("📥 STEP 1 ── 安裝 NOALBS", color=0x1565c0)
+    e1.add_field(name="下載連結", value=NOALBS_URL, inline=False)
+    e1.add_field(name="安裝步驟", inline=False, value=(
+        "1. 前往上方連結，下載最新版本，依你的系統選擇對應的 `.zip`：\n"
+        "　　🪟 Windows：`x86_64-windows`\n"
+        "　　🍎 Mac（M1 以後）：`aarch64-apple`\n"
+        "　　🍎 Mac（Intel）：`x86_64-apple`\n"
+        "2. 解壓縮後，將下方附上的 `config.json` 和 `.env` **覆蓋**放入資料夾\n"
+        "3. 完成！"
+    ))
+    e1.add_field(name="⚠️ 注意：`.env` 檔案重新命名", inline=False, value=(
+        "下載下來的 `.env` 檔案，**檔名會顯示為 `env`（沒有點）**。\n"
+        "放入資料夾前，請先將檔名改回 **`.env`**（加上開頭的點）。"
+    ))
+    await user.send(embed=e1)
+    await user.send(
+        content="⬇️ **請下載以下兩個檔案：**",
+        files=[
+            discord.File(io.BytesIO(config_json.encode()), filename="config.json"),
+            discord.File(io.BytesIO(env_content.encode()), filename=".env"),
+        ],
+    )
+
+    e2 = embed("🎬 STEP 2 ── 匯入 OBS 場景集", color=0x1565c0)
+    e2.add_field(name="場景集資料夾路徑", inline=False, value=(
+        "**Windows：**\n`%APPDATA%\\obs-studio\\basic\\scenes\\`\n\n"
+        "**Mac：**\n`~/Library/Application Support/obs-studio/basic/scenes/`"
+    ))
+    e2.add_field(name="匯入步驟", inline=False, value=(
+        "1. 將下方附上的 `IRL.json` 放入上方資料夾\n"
+        "2. 開啟 OBS → 上方選單 **場景集** → **匯入**\n"
+        "3. 選擇 `IRL.json` 匯入\n"
+        "4. 再次點 **場景集** → 切換到 **IRL**"
+    ))
+    await user.send(embed=e2)
+    await user.send(
+        content="⬇️ **請下載以下檔案：**",
+        files=[
+            discord.File(io.BytesIO(obs_json.encode()), filename="IRL.json"),
+        ],
+    )
+
+    e3 = embed("▶️ STEP 3 ── 每次開台的流程", color=0x1565c0)
+    e3.add_field(name="開台前必做", inline=False, value=(
+        "1. 開啟 **OBS**（確認場景集為 IRL）\n"
+        "2. 開啟 **NOALBS**（執行 `noalbs.exe`）\n"
+        "3. 在聊天室輸入 `!start` 開始實況\n"
+        "4. 手機 App 輸入推流位址開始推流\n\n"
+        "⚠️ OBS 和 NOALBS **兩個都要開**，缺一不可！"
+    ))
+    await user.send(embed=e3)
+
+    e4 = embed("🎉 設定完成！以下是你的推拉流資訊", color=0x43a047)
+    e4.add_field(name="📡 推流位址（手機 App 使用）",    value=f"```{srt_push}```", inline=False)
+    e4.add_field(name="📱 手機 App 一鍵設定", inline=False, value=(
+        f"[Moblin 點此設定（請使用手機點擊連結）]({moblin_url})\n\n"
+        f"[IRL Pro 點此設定（請使用手機點擊連結）]({larix_url})\n"
+    ))
+    e4.add_field(name="🎬 拉流位址（OBS 媒體來源已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
+    e4.add_field(name="🖥️ 伺服器 IP", value=f"`{ip}`", inline=True)
+    await user.send(embed=e4)
+
+    e5 = embed("💬 NOALBS 聊天室指令", color=0x6a1b9a)
+    e5.add_field(name="可用指令", inline=False, value=(
+        "以下指令可在 Twitch 聊天室直接輸入：\n\n"
+        "`!b` — 查詢目前推流 Bitrate\n"
+        "`!ss`（或 `!switch`）— 手動切換場景（主播可用）\n"
+        "`!r`（或 `!refresh`）— 重新整理連線（管理員可用）\n"
+        "`!start` — 手動開始實況（主播可用）\n"
+        "`!stop` — 手動停止實況（主播可用）\n\n"
+        "NOALBS 也會在場景自動切換時於聊天室發送通知訊息。"
+    ))
+    e5.add_field(name="🚌 揪團出遊時自動停播", inline=False, value=(
+        "當你在 Twitch 對其他頻道發起 **Raid（揪團）** 時，"
+        "NOALBS 會偵測到 Raid 動作並**自動停止串流**，"
+        "不需要手動回到電腦按停止，非常適合 IRL 結束時直接揪團收台。"
+    ))
+    await user.send(embed=e5)
+
+    await user.send("🎊 **全部完成！祝你直播順利！** 如有任何問題歡迎回到伺服器詢問。")
+    await send_admin_log(user, "✅ 自架伺服器設定完成")
 
 # ── 刪除伺服器流程 ─────────────────────────────────────────────────────────────
 

@@ -166,7 +166,12 @@ async def handle_setup_mode(message: discord.Message, state: dict):
 
 
 async def handle_server_ip(message: discord.Message, state: dict):
-    state["data"]["server_ip"] = message.content.strip()
+    text = message.content.strip()
+    if text == "取消":
+        user_states.pop(message.author.id, None)
+        await message.channel.send("❌ 已取消。如需重新開始，請在伺服器使用 `/irlsetup`。")
+        return
+    state["data"]["server_ip"] = text
     state["step"] = "awaiting_twitch_id"
     e = embed(color=0x43a047)
     e.add_field(name="STEP 2 ── Twitch 頻道 ID", inline=False, value=(

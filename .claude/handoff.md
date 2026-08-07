@@ -1,32 +1,31 @@
-# Handoff — 2026-08-06 17:45
+# Handoff — 2026-08-07 16:02
 
 ## 現在在做什麼
-完成「自架伺服器 NOALBS 引導流程」新功能：`/irlsetup` 現在可選擇「全新建立伺服器」（原 Vultr 自動流程，不變）或「已有自己的伺服器」（新流程，只需提供 IP，機器人直接產生 NOALBS 設定檔並引導安裝）。8 個實作任務全數 TDD 完成並通過 review，最終整體 review 判定 Ready to merge。**PR #1 已建立，等待 review/merge。**
+PR #1（自架伺服器 NOALBS 引導流程）已 merge 到 main，並完成伺服器部署更新。今天另外修復一個 Vultr API key 編碼錯誤，以及處理 handoff 裡記錄的兩個 Minor 後續事項（取消輸入處理 + 完整流程整合測試）。**目前只剩最後一個 commit 還沒 push + 部署。**
 
 ## 馬上要做的事（優先順序）
-1. Review 並 merge PR #1：https://github.com/HitoriGS/irl-server-bot/pull/1（分支 `worktree-self-hosted-noalbs`）
-2. 本地 `main` 有兩個 spec/plan commit（`7e8f167`、`9daf625`）還沒 push 到 origin，`origin/main` 目前仍停在 `274fce5` — merge PR 時會一併帶上去，不用額外處理；但若打算先手動同步 main，記得這兩個 commit 還在本機
-3. Merge 完成後清理：`git worktree remove .claude/worktrees/self-hosted-noalbs` + `git branch -d worktree-self-hosted-noalbs`（本機與 `git push origin --delete worktree-self-hosted-noalbs` 遠端分支）
-4. 視情況處理 PR 裡記錄的兩個 Minor 後續事項（見下方）
+1. **push 本地 commit `ec083e2` 到 origin/main**（`handle_server_ip` 取消處理修復 + 完整流程整合測試，尚未上遠端）
+2. push 完後，到伺服器（202.182.121.110）跑 `./update.sh` 同步部署，讓取消處理修復生效
+3. 觀察伺服器 log，確認 Vultr key 編碼錯誤（`latin-1' codec can't encode...`）修復後沒有再出現
+4. （選做）伺服器 SSH 密碼今天在對話中出現過明碼，建議找時間更換
 
 ## 注意事項 / 踩坑紀錄
-- 開發機只有 Python 3.8，但正式環境（Dockerfile）pin Python 3.11。`bot.py`/`vultr_api.py` 用了 PEP 585 語法（`dict[int, dict]`），3.8 下 `import bot` 會直接炸掉——已加 `from __future__ import annotations` 讓本機測試能跑，純型別語法變更，不影響任何行為（已經 reviewer 確認）
-- 自架伺服器 IP **刻意不驗證格式**，直接信任使用者輸入（明確設計決策，不是疏漏）
-- 自架完成畫面刻意精簡，不含 Vultr 專屬內容（伺服器規格/月費/API Key/`/irldelete` 提示）——這是使用者要求的範圍
-- PR 中兩個 Minor 待辦（review 標記，非阻塞，使用者決定先 merge 再處理）：
-  1. 目前 18 個測試都是逐函式驗證，還沒有一個測試真正透過 `STEP_HANDLERS` 走完整自架伺服器對話流程（disclaimer→setup_mode→server_ip→...→completion）
-  2. `handle_server_ip`（bot.py）沒有處理使用者輸入「取消」的情況——會被當成 server_ip 存進去，而不是中斷流程。Vultr 流程中間步驟也有一樣的既有行為，非本次新增退化，但 `/irlsetup` 提示文字告訴使用者任何時候都能輸入「取消」
+- **SSH 連線方式**：伺服器不支援 `ssh user:pass@host` 語法（那是 URL 格式，會被 shell 誤判特殊字元），要用 `sshpass -p '密碼' ssh root@202.182.121.110`，密碼含特殊字元記得用單引號包住
+- **merge PR 後記得 `git pull` 本機 main**——今天 merge 完忘記同步，導致本機落後 origin 11 個 commit 一段時間才發現，中間差點誤判 PR 內容沒生效
+- 伺服器上曾出現 `.gitignore`、`update.sh` 是直接放上去、未走版控的殘留檔（與 tracked 版本內容衝突導致 `git pull` 失敗），已清掉 untracked 版本並成功同步
+- Vultr key 編碼錯誤根因：使用者複製貼上 API Key 時混入非 latin-1 字元（全形符號/隱藏字元），`requests` 送 HTTP header 直接炸掉例外，被 `validate_key()` 吃掉變成含糊的「Key 無效」。修法：在 `handle_vultr_key`／`handle_delete_key` 收到輸入後先 `api_key.encode("latin-1")` 檢查，失敗就給明確訊息（不用等打 API）
+- `handle_server_ip` 先前沒有處理「取消」輸入，會被誤存成伺服器 IP，而不是中斷流程——已比照其他 handler 補上取消檢查
+- 開發機只有 Python 3.8，正式環境 pin 3.11，`bot.py` 用了 `from __future__ import annotations` 讓 PEP 585 語法在 3.8 也能跑（沿用自 PR #1，非本次新增）
 
 ## 相關檔案
-- `docs/superpowers/specs/2026-08-06-self-hosted-noalbs-setup-design.md` — 這次功能的 spec
-- `docs/superpowers/plans/2026-08-06-self-hosted-noalbs-setup.md` — 8 任務實作計畫（含每個任務的完整程式碼）
-- `bot.py` — 新增 `handle_setup_mode`、`handle_server_ip`、`send_self_hosted_completion`、`_step_num`；`STEP_HANDLERS` 模組層級分派表
-- `tests/` — 本次新增，18 個測試（pytest + pytest-asyncio）
-- `requirements-dev.txt`、`pytest.ini` — 測試環境設定（專案首次導入）
+- `bot.py` — 本次修改 `handle_vultr_key`、`handle_delete_key`（latin-1 檢查）、`handle_server_ip`（取消處理）
+- `tests/test_server_ip.py` — 新增取消測試
+- `tests/test_full_self_hosted_flow.py` — 新增：透過 `STEP_HANDLERS` 走完整自架伺服器對話流程的整合測試
+- `update.sh` — 伺服器上一鍵更新腳本（pull → 重建 image → 重啟 container），本次部署更新有用到
 
 ## 最後狀態
-- worktree：`.claude/worktrees/self-hosted-noalbs`，分支 `worktree-self-hosted-noalbs`，已 push 到 origin，最新 commit `ca82e8a`
-- 本機 `main`：commit `9daf625`（比 `origin/main` 多兩個 spec/plan commit，尚未 push）
-- 測試：`pytest -q` → 18 passed
-- PR：#1，狀態 open，Ready to merge（無 Critical/Important 問題）
-- 上一輪（7/22）部署到正式 Vultr 伺服器的內容仍然有效、未受本次變更影響（本次純程式碼功能新增，未涉及伺服器操作）
+- 本機 `main`：commit `ec083e2`，比 `origin/main`（`40bac69`）多 1 個 commit，**尚未 push**
+- 測試：`pytest -q` → 20 passed
+- 伺服器（202.182.121.110）：container 已更新到 `40bac69`（今天稍早那次），還沒包含 `ec083e2`
+- PR #1：已 merge，worktree 與分支（本機+遠端）已清理完畢
+- 前一版 handoff 記錄的兩個 Minor 事項：均已處理完成（見上）

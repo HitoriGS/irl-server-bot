@@ -131,6 +131,13 @@ async def handle_disclaimer(message: discord.Message, state: dict):
 
 async def handle_vultr_key(message: discord.Message, state: dict):
     api_key = message.content.strip()
+    try:
+        api_key.encode("latin-1")
+    except UnicodeEncodeError:
+        await message.channel.send(
+            "❌ Key 含有無法識別的特殊字元（可能複製貼上時夾帶了全形符號或隱藏字元），請重新複製後再貼上一次。"
+        )
+        return
     await message.channel.send("⏳ 正在驗證 API Key...")
     loop = asyncio.get_running_loop()
     vultr = VultrAPI(api_key)
@@ -468,6 +475,13 @@ async def send_delete_welcome(user: discord.User):
 
 async def handle_delete_key(message: discord.Message, state: dict):
     api_key = message.content.strip()
+    try:
+        api_key.encode("latin-1")
+    except UnicodeEncodeError:
+        await message.channel.send(
+            "❌ Key 含有無法識別的特殊字元（可能複製貼上時夾帶了全形符號或隱藏字元），請重新複製後再貼上一次。"
+        )
+        return
     await message.channel.send("⏳ 正在驗證 API Key 並查詢伺服器...")
     loop = asyncio.get_running_loop()
     vultr = VultrAPI(api_key)

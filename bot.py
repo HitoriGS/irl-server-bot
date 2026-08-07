@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import io
 import logging
@@ -68,6 +70,11 @@ async def send_admin_log(user: discord.User, action: str):
 
 # ── STEP 處理函式 ──────────────────────────────────────────────────────────────
 
+def _step_num(base: int, mode: str) -> int:
+    """自架伺服器模式少了 2 個前置步驟（Vultr Key + 地區選擇合併為 1 個 IP 步驟），STEP 編號少 1。"""
+    return base - 1 if mode == "self_hosted" else base
+
+
 async def send_welcome(user: discord.User):
     user_states[user.id] = {"step": "awaiting_disclaimer", "data": {}}
 
@@ -108,23 +115,63 @@ async def handle_disclaimer(message: discord.Message, state: dict):
         await message.channel.send("請輸入 `同意` 表示同意聲明並繼續，或輸入 `取消` 中止。")
         return
 
-    # 同意後進入 STEP 1
-    state["step"] = "awaiting_vultr_key"
+    # 同意後選擇架設方式
+    state["step"] = "awaiting_setup_mode"
     e = embed("✅ 已確認聲明，開始設定！", color=0x43a047)
-    e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
-        f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
-        f"👉 {VULTR_REFERRAL}\n\n"
-        f"註冊帳號需綁定 Paypal 或信用卡\n"
-        f"不須預先儲值，可勾選 **I just want to link my credit card.**\n"
-        f"伺服器是月結帳單付款\n\n"
-        f"註冊完成後，請參考以下圖文教學取得 API Key：\n"
-        f"📖 {VULTR_API_GUIDE}\n\n"
-        f"取得 API Key 後貼給我。"
+    e.add_field(name="🔀 選擇架設方式", inline=False, value=(
+        "1️⃣ **全新建立伺服器** — 機器人自動於 Vultr 建立雲端伺服器（約 $6 USD/月）\n"
+        "2️⃣ **已有自己的伺服器** — 你已自行架好 SRT Live Server 等推流環境，"
+        "機器人僅需你的伺服器 IP，直接引導設定 NOALBS\n\n"
+        "請輸入對應數字（`1` 或 `2`）。"
     ))
-    e.add_field(name="⚠️ 重要：不要設定 IP 白名單", inline=False, value=(
-        "建立 API Key 時，頁面下方有一個 **Access Control List**。\n"
-        "**請保持空白，不要填入任何 IP 位址。**\n\n"
-        "如果填了 IP 限制，機器人將無法建立伺服器，導致設定流程失敗。"
+    await message.channel.send(embed=e)
+
+
+async def handle_setup_mode(message: discord.Message, state: dict):
+    choice = message.content.strip()
+    if choice == "1":
+        state["data"]["mode"] = "vultr"
+        state["step"] = "awaiting_vultr_key"
+        e = embed(color=0x43a047)
+        e.add_field(name="STEP 1 ── 註冊 Vultr 並取得 API Key", inline=False, value=(
+            f"請透過以下推薦連結註冊帳號（方案 $6 USD/月）：\n"
+            f"👉 {VULTR_REFERRAL}\n\n"
+            f"註冊帳號需綁定 Paypal 或信用卡\n"
+            f"不須預先儲值，可勾選 **I just want to link my credit card.**\n"
+            f"伺服器是月結帳單付款\n\n"
+            f"註冊完成後，請參考以下圖文教學取得 API Key：\n"
+            f"📖 {VULTR_API_GUIDE}\n\n"
+            f"取得 API Key 後貼給我。"
+        ))
+        e.add_field(name="⚠️ 重要：不要設定 IP 白名單", inline=False, value=(
+            "建立 API Key 時，頁面下方有一個 **Access Control List**。\n"
+            "**請保持空白，不要填入任何 IP 位址。**\n\n"
+            "如果填了 IP 限制，機器人將無法建立伺服器，導致設定流程失敗。"
+        ))
+        await message.channel.send(embed=e)
+        return
+
+    if choice == "2":
+        state["data"]["mode"] = "self_hosted"
+        state["step"] = "awaiting_server_ip"
+        e = embed(color=0x43a047)
+        e.add_field(name="STEP 1 ── 你的伺服器 IP", inline=False, value=(
+            "請確認你的伺服器已架好 **SRT Live Server** 等推流環境，並開放對應連接埠。\n\n"
+            "請輸入你的伺服器 IP 位址："
+        ))
+        await message.channel.send(embed=e)
+        return
+
+    await message.channel.send("請輸入 `1`（全新建立伺服器）或 `2`（已有自己的伺服器）。")
+
+
+async def handle_server_ip(message: discord.Message, state: dict):
+    state["data"]["server_ip"] = message.content.strip()
+    state["step"] = "awaiting_twitch_id"
+    e = embed(color=0x43a047)
+    e.add_field(name="STEP 2 ── Twitch 頻道 ID", inline=False, value=(
+        "請輸入你的 Twitch 頻道名稱（小寫英文，不含 @）：\n"
+        "例如：`hitorigs`"
     ))
     await message.channel.send(embed=e)
 
@@ -187,8 +234,9 @@ async def handle_twitch_id(message: discord.Message, state: dict):
         return
     state["data"]["twitch_id"] = tid
     state["step"] = "awaiting_twitch_oauth"
+    step_num = _step_num(4, state["data"]["mode"])
     e = embed(color=0x9146ff)
-    e.add_field(name="STEP 4 ── Twitch OAuth 金鑰", inline=False, value=(
+    e.add_field(name=f"STEP {step_num} ── Twitch OAuth 金鑰", inline=False, value=(
         f"請前往以下網址取得 OAuth Token：\n"
         f"👉 {TWITCH_TOKEN_URL}\n\n"
         f"**步驟：**\n"
@@ -206,8 +254,9 @@ async def handle_twitch_oauth(message: discord.Message, state: dict):
         token = token[6:]
     state["data"]["twitch_oauth"] = token
     state["step"] = "awaiting_obs_password"
+    step_num = _step_num(5, state["data"]["mode"])
     e = embed(color=0x43a047)
-    e.add_field(name="STEP 5 ── OBS WebSocket 密碼", inline=False, value=(
+    e.add_field(name=f"STEP {step_num} ── OBS WebSocket 密碼", inline=False, value=(
         "NOALBS 需透過 OBS WebSocket 控制場景切換。\n\n"
         "請到 OBS → **工具** → **WebSocket 伺服器設定** → 查看或設定密碼\n\n"
         "請輸入你的 OBS WebSocket 密碼："
@@ -218,8 +267,9 @@ async def handle_twitch_oauth(message: discord.Message, state: dict):
 async def handle_obs_password(message: discord.Message, state: dict):
     state["data"]["obs_password"] = message.content.strip()
     state["step"] = "awaiting_obs_port"
+    step_num = _step_num(6, state["data"]["mode"])
     e = embed(color=0x43a047)
-    e.add_field(name="STEP 6 ── OBS WebSocket Port", inline=False, value=(
+    e.add_field(name=f"STEP {step_num} ── OBS WebSocket Port", inline=False, value=(
         "請到 OBS → **工具** → **WebSocket 伺服器設定** → 查看伺服器連接埠\n\n"
         "預設為 `4455`，如果你沒有更改過，直接輸入 `4455` 即可。"
     ))
@@ -235,27 +285,35 @@ async def handle_obs_port(message: discord.Message, state: dict):
     state["step"] = "confirming"
     d = state["data"]
     e = embed("📋 請確認以下資料", color=0xff9800)
-    e.add_field(name="伺服器地區",   value=d["region_name"],                            inline=True)
+    if d["mode"] == "self_hosted":
+        e.add_field(name="伺服器 IP",     value=d["server_ip"],                              inline=True)
+    else:
+        e.add_field(name="伺服器地區",   value=d["region_name"],                            inline=True)
     e.add_field(name="Twitch ID",    value=d["twitch_id"],                              inline=True)
     e.add_field(name="OAuth Token",  value=f'`{d["twitch_oauth"][:8]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS 密碼",     value=f'`{d["obs_password"][:3]}...`（已遮罩）',  inline=True)
     e.add_field(name="OBS Port",     value=f'`{d["obs_port"]}`',                       inline=True)
-    p = state["data"].get("plan_info", {})
-    vcpu      = p.get("vcpu_count", "?")
-    ram_gb    = round(p["ram"] / 1024) if p.get("ram") else "?"
-    disk      = p.get("disk", "?")
-    bw_tb     = p["bandwidth"] / 1024 if p.get("bandwidth") else None
-    bw_str    = f"{bw_tb:g} TB" if bw_tb and bw_tb >= 1 else (f"{p['bandwidth']} GB" if p.get("bandwidth") else "?")
-    cost      = int(p["monthly_cost"]) if p.get("monthly_cost") and p["monthly_cost"] == int(p["monthly_cost"]) else p.get("monthly_cost", "?")
-    e.add_field(name="🖥️ 伺服器規格", inline=False, value=(
-        f"{vcpu} vCPU・{ram_gb} GB RAM・{disk} GB SSD\n"
-        f"每月流量：**{bw_str}**\n"
-        f"月費：**${cost} USD／月**（依實際使用天數按比例計算）"
-    ))
-    e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
-        "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"
-        "輸入 `確認` 開始 ／ `取消` 中止"
-    ))
+    if d["mode"] == "vultr":
+        p = state["data"].get("plan_info", {})
+        vcpu      = p.get("vcpu_count", "?")
+        ram_gb    = round(p["ram"] / 1024) if p.get("ram") else "?"
+        disk      = p.get("disk", "?")
+        bw_tb     = p["bandwidth"] / 1024 if p.get("bandwidth") else None
+        bw_str    = f"{bw_tb:g} TB" if bw_tb and bw_tb >= 1 else (f"{p['bandwidth']} GB" if p.get("bandwidth") else "?")
+        cost      = int(p["monthly_cost"]) if p.get("monthly_cost") and p["monthly_cost"] == int(p["monthly_cost"]) else p.get("monthly_cost", "?")
+        e.add_field(name="🖥️ 伺服器規格", inline=False, value=(
+            f"{vcpu} vCPU・{ram_gb} GB RAM・{disk} GB SSD\n"
+            f"每月流量：**{bw_str}**\n"
+            f"月費：**${cost} USD／月**（依實際使用天數按比例計算）"
+        ))
+        e.add_field(name="⚠️ 確認後將開始自動部署", inline=False, value=(
+            "預計花費 **10–15 分鐘**，期間請保持私訊開啟。\n\n"
+            "輸入 `確認` 開始 ／ `取消` 中止"
+        ))
+    else:
+        e.add_field(name="⚠️ 確認後將產生設定檔", inline=False, value=(
+            "輸入 `確認` 開始 ／ `取消` 中止"
+        ))
     await message.channel.send(embed=e)
 
 
@@ -268,6 +326,14 @@ async def handle_confirmation(message: discord.Message, state: dict):
     if text != "確認":
         await message.channel.send("請輸入 `確認` 或 `取消`。")
         return
+
+    if state["data"]["mode"] == "self_hosted":
+        state["step"] = "completing"
+        await message.channel.send("🚀 **產生設定檔中...**")
+        await send_self_hosted_completion(message.author, state)
+        user_states.pop(message.author.id, None)
+        return
+
     state["step"] = "deploying"
     await message.channel.send("🚀 **開始部署！** 我會隨時回報進度，請稍候...")
     asyncio.create_task(run_deployment(message.author, state))
@@ -461,6 +527,108 @@ async def send_completion(user: discord.User, result: dict):
     await user.send("🎊 **全部完成！祝你直播順利！** 如有任何問題歡迎回到伺服器詢問。")
     await send_admin_log(user, "✅ 部署伺服器完成")
 
+
+async def send_self_hosted_completion(user: discord.User, state: dict):
+    """自架伺服器模式的完成流程，不呼叫 Vultr API。"""
+    d        = state["data"]
+    ip       = d["server_ip"]
+    tid      = d["twitch_id"]
+    oauth    = d["twitch_oauth"]
+    obs_pw   = d["obs_password"]
+    obs_port = d["obs_port"]
+
+    srt_push = f"srtla://{ip}:5000?streamid=live/stream/belabox"
+    srt_pull = f"srt://{ip}:8282?streamid=play/stream/belabox"
+
+    moblin_url = f"https://hitorigs.live/irl/moblin/?ip={ip}"
+    larix_url  = f"https://hitorigs.live/irl/larix/?ip={ip}"
+
+    config_json = generate_config_json(tid, ip, obs_pw, obs_port)
+    env_content = generate_env_file(tid, oauth)
+    obs_json    = generate_obs_json(ip)
+
+    e1 = embed("📥 STEP 1 ── 安裝 NOALBS", color=0x1565c0)
+    e1.add_field(name="下載連結", value=NOALBS_URL, inline=False)
+    e1.add_field(name="安裝步驟", inline=False, value=(
+        "1. 前往上方連結，下載最新版本，依你的系統選擇對應的 `.zip`：\n"
+        "　　🪟 Windows：`x86_64-windows`\n"
+        "　　🍎 Mac（M1 以後）：`aarch64-apple`\n"
+        "　　🍎 Mac（Intel）：`x86_64-apple`\n"
+        "2. 解壓縮後，將下方附上的 `config.json` 和 `.env` **覆蓋**放入資料夾\n"
+        "3. 完成！"
+    ))
+    e1.add_field(name="⚠️ 注意：`.env` 檔案重新命名", inline=False, value=(
+        "下載下來的 `.env` 檔案，**檔名會顯示為 `env`（沒有點）**。\n"
+        "放入資料夾前，請先將檔名改回 **`.env`**（加上開頭的點）。"
+    ))
+    await user.send(embed=e1)
+    await user.send(
+        content="⬇️ **請下載以下兩個檔案：**",
+        files=[
+            discord.File(io.BytesIO(config_json.encode()), filename="config.json"),
+            discord.File(io.BytesIO(env_content.encode()), filename=".env"),
+        ],
+    )
+
+    e2 = embed("🎬 STEP 2 ── 匯入 OBS 場景集", color=0x1565c0)
+    e2.add_field(name="場景集資料夾路徑", inline=False, value=(
+        "**Windows：**\n`%APPDATA%\\obs-studio\\basic\\scenes\\`\n\n"
+        "**Mac：**\n`~/Library/Application Support/obs-studio/basic/scenes/`"
+    ))
+    e2.add_field(name="匯入步驟", inline=False, value=(
+        "1. 將下方附上的 `IRL.json` 放入上方資料夾\n"
+        "2. 開啟 OBS → 上方選單 **場景集** → **匯入**\n"
+        "3. 選擇 `IRL.json` 匯入\n"
+        "4. 再次點 **場景集** → 切換到 **IRL**"
+    ))
+    await user.send(embed=e2)
+    await user.send(
+        content="⬇️ **請下載以下檔案：**",
+        files=[
+            discord.File(io.BytesIO(obs_json.encode()), filename="IRL.json"),
+        ],
+    )
+
+    e3 = embed("▶️ STEP 3 ── 每次開台的流程", color=0x1565c0)
+    e3.add_field(name="開台前必做", inline=False, value=(
+        "1. 開啟 **OBS**（確認場景集為 IRL）\n"
+        "2. 開啟 **NOALBS**（執行 `noalbs.exe`）\n"
+        "3. 在聊天室輸入 `!start` 開始實況\n"
+        "4. 手機 App 輸入推流位址開始推流\n\n"
+        "⚠️ OBS 和 NOALBS **兩個都要開**，缺一不可！"
+    ))
+    await user.send(embed=e3)
+
+    e4 = embed("🎉 設定完成！以下是你的推拉流資訊", color=0x43a047)
+    e4.add_field(name="📡 推流位址（手機 App 使用）",    value=f"```{srt_push}```", inline=False)
+    e4.add_field(name="📱 手機 App 一鍵設定", inline=False, value=(
+        f"[Moblin 點此設定（請使用手機點擊連結）]({moblin_url})\n\n"
+        f"[IRL Pro 點此設定（請使用手機點擊連結）]({larix_url})\n"
+    ))
+    e4.add_field(name="🎬 拉流位址（OBS 媒體來源已自動在場景集內生成，不用再手動填入）", value=f"```{srt_pull}```", inline=False)
+    e4.add_field(name="🖥️ 伺服器 IP", value=f"`{ip}`", inline=True)
+    await user.send(embed=e4)
+
+    e5 = embed("💬 NOALBS 聊天室指令", color=0x6a1b9a)
+    e5.add_field(name="可用指令", inline=False, value=(
+        "以下指令可在 Twitch 聊天室直接輸入：\n\n"
+        "`!b` — 查詢目前推流 Bitrate\n"
+        "`!ss`（或 `!switch`）— 手動切換場景（主播可用）\n"
+        "`!r`（或 `!refresh`）— 重新整理連線（管理員可用）\n"
+        "`!start` — 手動開始實況（主播可用）\n"
+        "`!stop` — 手動停止實況（主播可用）\n\n"
+        "NOALBS 也會在場景自動切換時於聊天室發送通知訊息。"
+    ))
+    e5.add_field(name="🚌 揪團出遊時自動停播", inline=False, value=(
+        "當你在 Twitch 對其他頻道發起 **Raid（揪團）** 時，"
+        "NOALBS 會偵測到 Raid 動作並**自動停止串流**，"
+        "不需要手動回到電腦按停止，非常適合 IRL 結束時直接揪團收台。"
+    ))
+    await user.send(embed=e5)
+
+    await user.send("🎊 **全部完成！祝你直播順利！** 如有任何問題歡迎回到伺服器詢問。")
+    await send_admin_log(user, "✅ 自架伺服器設定完成")
+
 # ── 刪除伺服器流程 ─────────────────────────────────────────────────────────────
 
 async def send_delete_welcome(user: discord.User):
@@ -601,6 +769,30 @@ async def handle_delete_confirm_3(message: discord.Message, state: dict):
         user_states.pop(message.author.id, None)
 
 
+# ── STEP_HANDLERS 分派表 ───────────────────────────────────────────────────────
+STEP_HANDLERS = {
+    # 架設流程
+    "awaiting_disclaimer":   handle_disclaimer,
+    "awaiting_setup_mode":   handle_setup_mode,
+    "awaiting_vultr_key":    handle_vultr_key,
+    "awaiting_region":       handle_region,
+    "awaiting_server_ip":    handle_server_ip,
+    "awaiting_twitch_id":    handle_twitch_id,
+    "awaiting_twitch_oauth": handle_twitch_oauth,
+    "awaiting_obs_password": handle_obs_password,
+    "awaiting_obs_port":     handle_obs_port,
+    "confirming":            handle_confirmation,
+    "deploying":             lambda m, s: m.channel.send("⏳ 部署正在進行中，請耐心等候..."),
+    # 刪除流程
+    "delete_awaiting_key":   handle_delete_key,
+    "delete_select":         handle_delete_select,
+    "delete_confirm_1":      handle_delete_confirm_1,
+    "delete_confirm_2":      handle_delete_confirm_2,
+    "delete_confirm_3":      handle_delete_confirm_3,
+    "deleting":              lambda m, s: m.channel.send("⏳ 刪除正在進行中，請耐心等候..."),
+}
+
+
 # ── Discord 事件 ───────────────────────────────────────────────────────────────
 
 @bot.event
@@ -676,26 +868,7 @@ async def on_message(message: discord.Message):
         return
 
     state = user_states[uid]
-    handlers = {
-        # 架設流程
-        "awaiting_disclaimer":   handle_disclaimer,
-        "awaiting_vultr_key":    handle_vultr_key,
-        "awaiting_region":       handle_region,
-        "awaiting_twitch_id":    handle_twitch_id,
-        "awaiting_twitch_oauth": handle_twitch_oauth,
-        "awaiting_obs_password": handle_obs_password,
-        "awaiting_obs_port":     handle_obs_port,
-        "confirming":            handle_confirmation,
-        "deploying":             lambda m, s: m.channel.send("⏳ 部署正在進行中，請耐心等候..."),
-        # 刪除流程
-        "delete_awaiting_key":   handle_delete_key,
-        "delete_select":         handle_delete_select,
-        "delete_confirm_1":      handle_delete_confirm_1,
-        "delete_confirm_2":      handle_delete_confirm_2,
-        "delete_confirm_3":      handle_delete_confirm_3,
-        "deleting":              lambda m, s: m.channel.send("⏳ 刪除正在進行中，請耐心等候..."),
-    }
-    handler = handlers.get(state["step"])
+    handler = STEP_HANDLERS.get(state["step"])
     if handler:
         await handler(message, state)
 
